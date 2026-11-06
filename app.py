@@ -90,7 +90,7 @@ if menu == "✍️ Reportar Horas Extras (Suma)":
                 st.success(f"✔️ Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
 
 # -------------------------------------------------------------------------
-# MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas - CON CASILLA DE DÍA)
+# MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas)
 # -------------------------------------------------------------------------
 elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
     st.header("🔻 Formulario de Solicitud de Tiempo Libre / Día Compensatorio")
@@ -118,14 +118,14 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
                 horas_negativas = -float(horas_solicitadas)
                 
                 cursor.execute('''
-                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
+                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, gateway_flag, motivo, total_horas, estado, evidencia, tipo_movimiento)
                     VALUES (?, ?, ?, 'Uso de Tiempo', ?, 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
                 ''', (nombre_libre, fecha_libre_str, dia_libre_semana, cargo_libre, motivo_libre, horas_negativas))
                 conn.commit()
                 st.success(f"🔻 Solicitud enviada. Esperando aprobación del jefe para descontar {horas_solicitadas} hrs el día {dia_libre_semana} {fecha_libre_str}.")
 
 # -------------------------------------------------------------------------
-# MÓDULO 3: PANEL DE CONTROL ADMINISTRATIVO (CON MÁXIMA PRIVACIDAD Y VISOR DE FOTOS)
+# MÓDULO 3: PANEL DE CONTROL ADMINISTRATIVO (PRIVADO)
 # -------------------------------------------------------------------------
 elif menu == "🔐 Panel de Control (Administrador)":
     st.header("🔐 Acceso Restringido - Panel del Jefe / Encargado")
@@ -146,7 +146,7 @@ elif menu == "🔐 Panel de Control (Administrador)":
     if st.session_state.get("autenticado", False):
         st.markdown("---")
         
-        # 1. Bolsa Acumulativa General (OCULTA AL PÚBLICO, SOLO VISIBLE AQUÍ)
+        # 1. Bolsa Acumulativa General (PRIVADA)
         st.subheader("📊 Bolsa Acumulativa de Horas Reales Disponibles (Privado)")
         resumen = pd.read_sql_query('''
             SELECT nombre as 'Empleado', 
@@ -161,7 +161,7 @@ elif menu == "🔐 Panel de Control (Administrador)":
         else:
             st.warning("No hay horas registradas ni saldos acumulados en este periodo.")
             
-        # 2. BANDEJA DE ENTRADA UNIFICADA DE PENDIENTES CON VISOR DE FOTOS AMPLIADO
+        # 2. BANDEJA DE ENTRADA UNIFICADA DE PENDIENTES CON VISOR DE FOTOS
         st.subheader("📥 Solicitudes Pendientes por Aprobar o Rechazar")
         pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
         
@@ -185,4 +185,4 @@ elif menu == "🔐 Panel de Control (Administrador)":
                     with col_b:
                         st.markdown(f"**Detalle / Motivo:** {fila['motivo']}")
                     with col_c:
-                        # VISOR DE EVIDENCIA EN TAMAÑO REAL PARA EL JEFE
+                        if tipo == 'INGRESO' and fila['evidencia'] is not None:
