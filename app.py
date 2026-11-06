@@ -118,7 +118,7 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
                 horas_negativas = -float(horas_solicitadas)
                 
                 cursor.execute('''
-                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, gateway_flag, motivo, total_horas, estado, evidencia, tipo_movimiento)
+                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
                     VALUES (?, ?, ?, 'Uso de Tiempo', ?, 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
                 ''', (nombre_libre, fecha_libre_str, dia_libre_semana, cargo_libre, motivo_libre, horas_negativas))
                 conn.commit()
@@ -186,3 +186,4 @@ elif menu == "🔐 Panel de Control (Administrador)":
                         st.markdown(f"**Detalle / Motivo:** {fila['motivo']}")
                     with col_c:
                         if tipo == 'INGRESO' and fila['evidencia'] is not None:
+                            st.image(fila['evidencia'], caption="📷 Evidencia del Trabajo Realizado", width=350)
