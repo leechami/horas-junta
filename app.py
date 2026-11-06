@@ -7,14 +7,14 @@ from datetime import datetime
 def conectar_db():
     conn = sqlite3.connect("control_horas_comunal.db")
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS registro_horas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT, fecha TEXT, dia TEXT, area TEXT, cargo TEXT,
             hora_inicio TEXT, hora_fin TEXT, motivo TEXT,
             total_horas REAL, estado TEXT, evidencia BLOB, tipo_movimiento TEXT
         )
-    """)
+    ''')
     conn.commit()
     return conn
 
@@ -22,7 +22,7 @@ st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
 st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Portal de Autoservicio")
 
-# MENÚ DE NAVEGACIÓN WEB EN LA BARRA LATERAL (PÚBLICO SÓLO FORMULARIOS)
+# MENÚ DE NAVEGACIÓN WEB EN LA BARRA LATERAL
 menu = st.sidebar.selectbox("Seleccione el Módulo", [
     "✍️ Reportar Horas Extras (Suma)", 
     "🔻 Solicitar Día Compensatorio (Resta)",
@@ -34,7 +34,7 @@ conn = conectar_db()
 cursor = conn.cursor()
 
 # -------------------------------------------------------------------------
-# MÓDULO 1: REPORTAR HORAS EXTRAS (Para sumar horas - PÚBLICO)
+# MÓDULO 1: REPORTAR HORAS EXTRAS (Para sumar horas)
 # -------------------------------------------------------------------------
 if menu == "✍️ Reportar Horas Extras (Suma)":
     st.header("✍️ Formulario para Reportar Horas Extras")
@@ -82,15 +82,15 @@ if menu == "✍️ Reportar Horas Extras (Suma)":
                 if foto_adjunta is not None:
                     foto_bytes = foto_adjunta.read()
                 
-                cursor.execute("""
+                cursor.execute('''
                     INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')
-                """, (nombre, fecha_str, dia_semana, area, cargo, str(hora_inicio), str(hora_fin), motivo, total_horas_calculadas, foto_bytes))
+                ''', (nombre, fecha_str, dia_semana, area, cargo, str(hora_inicio), str(hora_fin), motivo, total_horas_calculadas, foto_bytes))
                 conn.commit()
                 st.success(f"✔️ Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
 
 # -------------------------------------------------------------------------
-# MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas - PÚBLICO)
+# MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas - CON CASILLA DE DÍA)
 # -------------------------------------------------------------------------
 elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
     st.header("🔻 Formulario de Solicitud de Tiempo Libre / Día Compensatorio")
@@ -105,7 +105,7 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
             fecha_libre = st.date_input("Fecha exacta solicitada para el día libre:", value=datetime.today())
             dia_libre_semana = st.selectbox("Día de la semana solicitado a ausentarse:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
         with col_c3:
-            horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej: 8.0 para un día entero):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
+            horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej: 8.0 para un día entero, 5.0 para medio tiempo):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
             
         motivo_libre = st.text_area("Justificación del tiempo libre (ej. Uso de compensatorio por sábado laborado en Ancón Recicla):")
         enviar_libre = st.form_submit_button("Enviar Solicitud de Tiempo Libre al Jefe")
@@ -117,15 +117,15 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
                 fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
                 horas_negativas = -float(horas_solicitadas)
                 
-                cursor.execute("""
+                cursor.execute('''
                     INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
                     VALUES (?, ?, ?, 'Uso de Tiempo', ?, 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
-                """, (nombre_libre, fecha_libre_str, dia_libre_semana, cargo_libre, motivo_libre, horas_negativas))
+                ''', (nombre_libre, fecha_libre_str, dia_libre_semana, cargo_libre, motivo_libre, horas_negativas))
                 conn.commit()
                 st.success(f"🔻 Solicitud enviada. Esperando aprobación del jefe para descontar {horas_solicitadas} hrs el día {dia_libre_semana} {fecha_libre_str}.")
 
 # -------------------------------------------------------------------------
-# MÓDULO 3: PANEL DE CONTROL ADMINISTRATIVO (SÓLO EL ADMIN VE SALDOS Y FOTOS)
+# MÓDULO 3: PANEL DE CONTROL ADMINISTRATIVO (CON MÁXIMA PRIVACIDAD Y VISOR DE FOTOS)
 # -------------------------------------------------------------------------
 elif menu == "🔐 Panel de Control (Administrador)":
     st.header("🔐 Acceso Restringido - Panel del Jefe / Encargado")
@@ -146,28 +146,23 @@ elif menu == "🔐 Panel de Control (Administrador)":
     if st.session_state.get("autenticado", False):
         st.markdown("---")
         
-        # 1. BOLSA DE SALDOS PRIVADA (Muestra saldos acumulados sumando extras y restando libres)
-        st.subheader("📊 BOLSA ACUMULATIVA PRIVADA — SALDOS OPERATIVOS REALES")
-        resumen = pd.read_sql_query("""
-            SELECT nombre as 'Nombre del Servidor Público', 
-                   SUM(total_horas) as 'Horas Netas Disponibles a Favor' 
+        # 1. Bolsa Acumulativa General (OCULTA AL PÚBLICO, SOLO VISIBLE AQUÍ)
+        st.subheader("📊 Bolsa Acumulativa de Horas Reales Disponibles (Privado)")
+        resumen = pd.read_sql_query('''
+            SELECT nombre as 'Empleado', 
+                   SUM(total_horas) as 'Saldo de Horas Disponibles' 
             FROM registro_horas 
             WHERE estado = 'Aprobado' 
             GROUP BY nombre
-        """, conn)
+        ''', conn)
         
         if not resumen.empty:
-            busqueda = st.text_input("🔍 Filtrar consulta por nombre:")
-            if busqueda:
-                resumen = resumen[resumen['Nombre del Servidor Público'].str.contains(busqueda, case=False)]
-            st.dataframe(resumen, use_container_width=True, hide_index=True)
+            st.dataframe(resumen, use_container_width=True)
         else:
-            st.warning("No hay saldos de horas consolidados aún en la base de datos.")
+            st.warning("No hay horas registradas ni saldos acumulados en este periodo.")
             
-        st.markdown("---")
-        
-        # 2. BANDEJA DE ENTRADA UNIFICADA DE PENDIENTES CON VISOR DE FOTOS REAL
-        st.subheader("📥 Solicitudes Nuevas por Validar (Extras y Descansos)")
+        # 2. BANDEJA DE ENTRADA UNIFICADA DE PENDIENTES CON VISOR DE FOTOS AMPLIADO
+        st.subheader("📥 Solicitudes Pendientes por Aprobar o Rechazar")
         pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
         
         if not pendientes.empty:
@@ -179,10 +174,15 @@ elif menu == "🔐 Panel de Control (Administrador)":
                     color_tipo = f"🔴 SOLICITUD DE DÍA LIBRE (-) — Solicita libre el día: {fila['dia']}"
                 
                 with st.expander(f"{color_tipo} | Empleado: {fila['nombre']} — Fecha: {fila['fecha']}"):
-                    col_a, col_b, col_c = st.columns([1, 1, 1.5])
+                    col_a, col_b, col_c = st.columns(3)
                     with col_a:
                         st.markdown(f"**Cargo:** {fila['cargo']} | **Área:** {fila['area']}")
                         if tipo == 'INGRESO':
                             st.markdown(f"**Horas a sumar:** {fila['total_horas']} hrs")
                             st.markdown(f"**Horario:** {fila['hora_inicio']} a {fila['hora_fin']}")
                         else:
+                            st.markdown(f"**Horas a descontar:** {abs(fila['total_horas'])} hrs")
+                    with col_b:
+                        st.markdown(f"**Detalle / Motivo:** {fila['motivo']}")
+                    with col_c:
+                        # VISOR DE EVIDENCIA EN TAMAÑO REAL PARA EL JEFE
