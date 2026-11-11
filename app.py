@@ -73,12 +73,12 @@ if not st.session_state["logged_in"]:
             else:
                 cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
                 datos_user = cursor.fetchone()
-                if datos_user and datos_user[0] == input_clave:
+                if datos_user and datos_user == input_clave:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = input_usuario
-                    st.session_state["user_fullname"] = datos_user[1]
+                    st.session_state["user_fullname"] = datos_user
                     st.session_state["user_role"] = "PERSONAL"
-                    st.session_state["requiere_cambio"] = datos_user[2]
+                    st.session_state["requiere_cambio"] = datos_user
                     st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas o usuario no registrado.")
@@ -88,7 +88,7 @@ if not st.session_state["logged_in"]:
 # -------------------------------------------------------------------------
 elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
     st.header("🔒 Cambio de Contraseña Obligatorio")
-    st.warning("Detectamos que estás ingresando con una contraseña temporal de la oficina. Por seguridad, debes crear una contraseña nueva y secreta que solo tú conozcas.")
+    st.warning("Detectamos que estás ingresando con una contraseña temporal de la oficina. Por seguridad, debes crear una contraseña nueva y secreta.")
     with st.form("form_cambio_obligatorio"):
         nueva_clave_1 = st.text_input("Digita tu nueva contraseña secreta:", type="password")
         nueva_clave_2 = st.text_input("Confirma tu nueva contraseña secreta:", type="password")
@@ -160,7 +160,7 @@ else:
             with st.form("form_reseteo_admin"):
                 cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
                 lista_usuarios = cursor.fetchall()
-                opciones_usuarios = {f"{u[1]} ({u[0]})": u[0] for u in lista_usuarios}
+                opciones_usuarios = {f"{u} ({u})": u for u in lista_usuarios}
                 if opciones_usuarios:
                     seleccionado = st.selectbox("Seleccione el Trabajador:", list(opciones_usuarios.keys()))
                     user_a_cambiar = opciones_usuarios[seleccionado]
@@ -179,5 +179,7 @@ else:
             if not pendientes.empty:
                 for index, fila in pendientes.iterrows():
                     tipo = fila['tipo_movimiento']
-                    color_tipo = "🟢 SOLICITUD DE HORAS EXTRAS (+)" if tipo == 'INGRESO' else "🔴 SOLICITUD DE DÍA LIBRE (-)"
-                    with st.expander(f"{color_tipo} | Empleado: {fila['nombre']} — Fecha: {fila['fecha']}"):
+                    label_movimiento = "🟢 HORAS EXTRAS (+)" if tipo == 'INGRESO' else "🔴 DÍA LIBRE (-)"
+                    
+                    st.markdown("---")
+                    st.markdown(f"### {label_movimiento} | Empleado: **{fila['nombre']}** — Fecha: {fila['fecha']}")
