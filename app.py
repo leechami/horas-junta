@@ -74,7 +74,7 @@ if not st.session_state["logged_in"]:
                     st.session_state["user_role"] = "ADMIN"
                     st.rerun()
                 else:
-                    cursor.execute("SELECT contrasena, nombre_completo, cargo FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
+                    cursor.execute("SELECT contrasena, nombre_completo FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
                     datos_user = cursor.fetchone()
                     if datos_user and datos_user[0] == input_clave:
                         st.session_state["logged_in"] = True
