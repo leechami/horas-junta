@@ -70,6 +70,7 @@ if not st.session_state["logged_in"]:
                 if input_usuario == "admin_ancon" and input_clave == "Ancon2026*":
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = "admin_ancon"
+                    st.session_state["user_fullname"] = "Director Administrador"
                     st.session_state["user_role"] = "ADMIN"
                     st.rerun()
                 else:
@@ -88,9 +89,11 @@ if not st.session_state["logged_in"]:
 # SI YA INICIÓ SESIÓN: DESPLEGAR LOS MÓDULOS CORRESPONDIENTES
 # -------------------------------------------------------------------------
 else:
+    # Botón para cerrar sesión siempre visible arriba a la izquierda
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
         st.session_state["username"] = ""
+        st.session_state["user_fullname"] = ""
         st.session_state["user_role"] = ""
         st.rerun()
 
@@ -185,6 +188,3 @@ else:
                 
                 if enviar_libre:
                     if motivo_libre == "":
-                        st.error("❌ El motivo es obligatorio.")
-                    else:
-                        fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
