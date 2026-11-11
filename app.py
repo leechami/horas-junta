@@ -2,8 +2,9 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import io
 
-# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL (BLINDADA CONTRA ERRORES)
+# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL
 def conectar_db():
     conn = sqlite3.connect("control_horas_comunal.db")
     cursor = conn.cursor()
@@ -26,7 +27,7 @@ def conectar_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM usuarios_personal")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         cursor.execute("""
             INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio)
             VALUES ('operario.ancon', 'Ancon123', 'Juan Pérez', 'Operador de Campo', 'Cuadrilla Compartida (16 op.)', 1)
@@ -170,14 +171,14 @@ else:
                 seleccionado = st.selectbox("Seleccione el Trabajador a Gestionar:", list(opciones_usuarios.keys()))
                 user_a_cambiar = opciones_usuarios[seleccionado]
                 
-                st.markdown("#### 1. Opción para Restablecer Contraseña")
-                with st.form("form_reseteo_admin"):
-                    clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123")
-                    boton_resetear = st.form_submit_button("Forzar Restablecimiento de Clave")
-                    if boton_resetear:
-                        cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 1 WHERE usuario = ?", (clave_reseteo, user_a_cambiar))
-                        conn.commit()
-                        st.success(f"✔️ Contraseña restablecida con éxito para el usuario '{user_a_cambiar}'.")
+                st.markdown("---")
+                st.markdown("#### 1. Restablecer Contraseña por Olvido")
+                clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123", key="input_reset_clave")
+                if st.button("Forzar Restablecimiento de Clave", key="btn_reset_clave"):
+                    cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 1 WHERE usuario = ?", (clave_reseteo, user_a_cambiar))
+                    conn.commit()
+                    st.success(f"✔️ Contraseña restablecida con éxito para el usuario '{user_a_cambiar}'.")
                 
-                st.markdown("#### 2. Opción para Eliminar Cuenta por Baja Completa")
-                with st.form("form_eliminar_admin"):
+                st.markdown("---")
+                st.markdown("#### 2. Eliminar Cuenta por Baja Completa")
+                st.warning(f"⚠️ ¡Cuidado! Si presiona el botón de abajo, se borrará de forma permanente el acceso del colaborador '{user_a_cambiar}'.")
