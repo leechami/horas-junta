@@ -25,7 +25,7 @@ def conectar_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM usuarios_personal")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         cursor.execute("""
             INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area)
             VALUES ('operario.ancon', 'Ancon123', 'Juan Pérez', 'Operador de Campo', 'Cuadrilla Compartida (16 op.)')
@@ -86,94 +86,100 @@ if not st.session_state["logged_in"]:
 # SI YA INICIÓ SESIÓN: DESPLEGAR LOS MÓDULOS CORRESPONDIENTES
 # -------------------------------------------------------------------------
 else:
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state["logged_in"] = False
-        st.session_state["username"] = ""
-        st.session_state["user_fullname"] = ""
-        st.session_state["user_role"] = ""
-        st.rerun()
-
-    # PERFIL DEL COLABORADOR (TRABAJADOR LOGUEADO)
-    if st.session_state["user_role"] == "PERSONAL":
-        st.sidebar.markdown(f"**Empleado:**\n{st.session_state['user_fullname']}")
-        menu_personal = st.sidebar.selectbox("Acciones Disponibles", [
-            "📊 Mi Panel y Estatus de Solicitudes",
-            "✍️ Reportar Horas Extras (+)",
-            "🔻 Solicitar Día Compensatorio (-)"
+    # ---------------------------------------------------------------------
+    # MENÚ PARA EL ROL DEL ADMINISTRADOR (JEFE PRINCIPAL)
+    # ---------------------------------------------------------------------
+    if st.session_state["user_role"] == "ADMIN":
+        st.sidebar.markdown("### 👑 Menú de Dirección")
+        menu_admin = st.sidebar.selectbox("Módulos de Gestión", [
+            "👤 Registrar Nuevos Colaboradores",
+            "📥 Bandeja de Solicitudes Pendientes",
+            "📊 Bolsa Acumulativa General",
+            "📚 Historial de Auditoría"
         ])
         
-        cursor.execute("SELECT nombre_completo, cargo, area FROM usuarios_personal WHERE usuario = ?", (st.session_state["username"],))
-        info_emp = cursor.fetchone()
-        emp_nombre, emp_cargo, emp_area = info_emp[0], info_emp[1], info_emp[2]
-
-        if menu_personal == "📊 Mi Panel y Estatus de Solicitudes":
-            st.header(f"👋 ¡Bienvenido, {emp_nombre}!")
-            cursor.execute("SELECT SUM(total_horas) FROM registro_horas WHERE nombre = ? AND estado = 'Aprobado'", (emp_nombre,))
-            saldo_res = cursor.fetchone()[0]
-            saldo_neto = saldo_res if saldo_res is not None else 0.0
-            st.metric(label="⌛ Tu Saldo de Horas Disponibles a Favor:", value=f"{saldo_neto} hrs")
+        st.sidebar.markdown("---")
+        if st.sidebar.button("🚪 Cerrar Sesión", key="btn_out_admin"):
+            st.session_state["logged_in"] = False
+            st.session_state["username"] = ""
+            st.session_state["user_fullname"] = ""
+            st.session_state["user_role"] = ""
+            st.rerun()
             
-            st.subheader("📚 Estado de mis Solicitudes Enviadas")
-            df_mis_solicitudes = pd.read_sql_query("""
-                SELECT fecha as 'Fecha', dia as 'Día', total_horas as 'Horas', 
-                       estado as 'Estatus del Jefe', tipo_movimiento as 'Tipo', motivo as 'Detalle/Motivo' 
-                FROM registro_horas WHERE nombre = ? ORDER BY id DESC
-            """, conn, params=(emp_nombre,))
-            if not df_mis_solicitudes.empty:
-                st.dataframe(df_mis_solicitudes, use_container_width=True, hide_index=True)
+        # EJECUCIÓN MÓDULO 1: REGISTRAR NUEVOS TRABAJADORES (PUESTO DE PRIMERO)
+        if menu_admin == "👤 Registrar Nuevos Colaboradores":
+            st.header("👤 Crear Cuenta de Acceso para el Personal")
+            st.info("Utilice este formulario para registrar un operario y generarle su usuario y clave institucional.")
+            with st.form("form_crear_user", clear_on_submit=True):
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    new_nombre = st.text_input("Nombre Completo del Servidor Público:")
+                    new_user = st.text_input("Crear Nombre de Usuario (ej: jose.perez):")
+                    new_clave = st.text_input("Asignar Contraseña Inicial:", type="password")
+                with col_u2:
+                    new_cargo = st.text_input("Cargo / Posición:")
+                    new_area = st.selectbox("Área / Sección asignada:", ["Cuadrilla Compartida (16 op.)", "Atención Ciudadana", "Administración", "Ornato", "Relaciones Públicas"])
+                boton_crear_cuenta = st.form_submit_button("Sellar Registro y Crear Cuenta")
+                if boton_crear_cuenta:
+                    if new_nombre == "" or new_user == "" or new_clave == "":
+                        st.error("❌ Por favor, rellene todos los campos del registro.")
+                    else:
+                        try:
+                            cursor.execute("""
+                                INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (new_user, new_clave, new_nombre, new_cargo, new_area))
+                            conn.commit()
+                            st.success(f"🎉 Cuenta creada con éxito para {new_nombre}. Ya puede ingresar con el usuario '{new_user}' y la clave asignada.")
+                        except:
+                            st.error("❌ El nombre de usuario ya existe. Elija otro diferente.")
+
+        elif menu_admin == "📥 Bandeja de Solicitudes Pendientes":
+            st.header("📥 Solicitudes Pendientes por Validar")
+            pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
+            if not pendientes.empty:
+                for index, fila in pendientes.iterrows():
+                    tipo = fila['tipo_movimiento']
+                    color_tipo = f"🟢 SOLICITUD DE HORAS EXTRAS (+) — Laboró: {fila['dia']}" if tipo == 'INGRESO' else f"🔴 SOLICITUD DE DÍA LIBRE (-) — Solicita libre: {fila['dia']}"
+                    with st.expander(f"{color_tipo} | Empleado: {fila['nombre']} — Fecha: {fila['fecha']}"):
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.markdown(f"**Cargo:** {fila['cargo']} | **Área:** {fila['area']}")
+                            if tipo == 'INGRESO':
+                                st.markdown(f"**Horas a sumar:** {fila['total_horas']} hrs")
+                                st.markdown(f"**Horario:** {fila['hora_inicio']} a {fila['hora_fin']}")
+                            else:
+                                st.markdown(f"**Horas a descontar:** {abs(fila['total_horas'])} hrs")
+                        with col_b:
+                            st.markdown(f"**Detalle / Motivo:** {fila['motivo']}")
+                        with col_c:
+                            if tipo == 'INGRESO' and fila['evidencia'] is not None:
+                                st.image(fila['evidencia'], caption="📷 Evidencia del Trabajo", width=300)
+                            else:
+                                st.caption("No requiere o no contiene archivo de foto.")
+                        col_btn1, col_btn2, _ = st.columns(3)
+                        with col_btn1:
+                            if st.button(f"🟢 Autorizar##{fila['id']}", key=f"ap_{fila['id']}"):
+                                cursor.execute("UPDATE registro_horas SET estado = 'Aprobado' WHERE id = ?", (fila['id'],))
+                                conn.commit()
+                                st.rerun()
+                        with col_btn2:
+                            if st.button(f"🔴 Denegar##{fila['id']}", key=f"re_{fila['id']}"):
+                                cursor.execute("UPDATE registro_horas SET estado = 'Rechazado' WHERE id = ?", (fila['id'],))
+                                conn.commit()
+                                st.rerun()
             else:
-                st.caption("Aún no has enviado ninguna solicitud al sistema.")
+                st.success("✅ Bandeja limpia. No hay solicitudes pendientes por procesar.")
 
-        elif menu_personal == "✍️ Reportar Horas Extras (+)":
-            st.header("✍️ Reportar Jornada Extraordinaria")
-            st.caption(f"Registrando como: **{emp_nombre}** | Cargo: {emp_cargo} | Área: {emp_area}")
-            with st.form("form_extras_p", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    fecha_input = st.date_input("Fecha de la Jornada:", value=datetime.today())
-                    dia_semana = st.selectbox("Día de la Semana:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-                with col2:
-                    hora_inicio = st.time_input("Hora de Inicio:")
-                    hora_fin = st.time_input("Hora de Finalización:")
-                motivo = st.text_area("Motivo o Evento de la jornada extraordinaria (ej. Feria del IMA):")
-                foto_adjunta = st.file_uploader("Adjuntar foto de la nota firmada o comprobante:", type=["png", "jpg", "jpeg"])
-                enviar = st.form_submit_button("Subir Solicitud de Horas Extras")
-                if enviar:
-                    fmt = "%H:%M:%S"
-                    t1 = datetime.strptime(str(hora_inicio), fmt)
-                    t2 = datetime.strptime(str(hora_fin), fmt)
-                    if t2 >= t1: diferencia = t2 - t1
-                    else: diferencia = (t2 - t1) + pd.Timedelta(days=1)
-                    total_horas_calculadas = round(diferencia.seconds / 3600, 2)
-                    foto_bytes = foto_adjunta.read() if foto_adjunta is not None else None
-                    fecha_str = fecha_input.strftime("%d/%m/%Y")
-                    cursor.execute("""
-                        INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')
-                    """, (emp_nombre, fecha_str, dia_semana, emp_area, emp_cargo, str(hora_inicio), str(hora_fin), motivo, total_horas_calculadas, foto_bytes))
-                    conn.commit()
-                    st.success(f"✔️ Solicitud registrada. Total calculado: {total_horas_calculadas} hrs. Esperando revisión del jefe.")
+        elif menu_admin == "📊 Bolsa Acumulativa General":
+            st.header("📊 Bolsa Acumulativa de Horas Reales Disponibles")
+            resumen = pd.read_sql_query("""
+                SELECT nombre as 'Empleado', SUM(total_horas) as 'Saldo Neto de Horas Disponibles' 
+                FROM registro_horas WHERE estado = 'Aprobado' GROUP BY nombre
+            """, conn)
+            if not resumen.empty:
+                st.dataframe(resumen, use_container_width=True, hide_index=True)
+            else:
+                st.warning("No hay horas aprobadas consolidadas en este periodo.")
 
-        elif menu_personal == "🔻 Solicitar Día Compensatorio (-)":
-            st.header("🔻 Solicitar Uso de Tiempo Libre / Día Compensatorio")
-            st.caption(f"Registrando como: **{emp_nombre}**")
-            with st.form("form_libres_p", clear_on_submit=True):
-                col_c1, col_c2 = st.columns(2)
-                with col_c1:
-                    fecha_libre = st.date_input("Fecha exacta solicitada para el día libre:", value=datetime.today())
-                    dia_libre_semana = st.selectbox("Día de la semana solicitado:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-                with col_c2:
-                    horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej: 8.0 para un día entero):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
-                motivo_libre = st.text_area("Justificación del tiempo libre solicitado:")
-                enviar_libre = st.form_submit_button("Enviar Solicitud de Tiempo Libre")
-                if enviar_libre:
-                    fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
-                    horas_negativas = -float(horas_solicitadas)
-                    cursor.execute("""
-                        INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
-                        VALUES (?, ?, ?, 'Uso de Tiempo', ?, 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
-                    """, (emp_nombre, fecha_libre_str, dia_libre_semana, emp_cargo, motivo_libre, horas_negativas))
-                    conn.commit()
-                    st.success(f"🔻 Solicitud enviada. Esperando aprobación para descontar {horas_solicitadas} hrs el día {dia_libre_semana}.")
-
-    # PORTAL DEL ADMINISTRADOR (JEFE / ENCARGADO LOGUEADO)
+        elif menu_admin == "📚 Historial de Auditoría":
