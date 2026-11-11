@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 
-# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL (CON SOPORTE PARA CLAVES TEMPORALES)
+# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL
 def conectar_db():
     conn = sqlite3.connect("control_horas_comunal.db")
     cursor = conn.cursor()
@@ -26,7 +26,7 @@ def conectar_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM usuarios_personal")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         cursor.execute("""
             INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio)
             VALUES ('operario.ancon', 'Ancon123', 'Juan Pérez', 'Operador de Campo', 'Cuadrilla Compartida (16 op.)', 1)
@@ -47,70 +47,58 @@ if "requiere_cambio" not in st.session_state: st.session_state["requiere_cambio"
 conn = conectar_db()
 cursor = conn.cursor()
 
-# -------------------------------------------------------------------------
 # PANTALLA GENERAL: INICIO DE SESIÓN UNIFICADO (LOGIN)
-# -------------------------------------------------------------------------
 if not st.session_state["logged_in"]:
     st.subheader("🔐 Iniciar Sesión en el Portal")
-    col_l1, col_l2 = st.columns(2)
-    
-    with col_l1:
-        with st.form("login_general"):
-            input_usuario = st.text_input("Usuario asignado:")
-            input_clave = st.text_input("Contraseña:", type="password")
-            boton_ingresar = st.form_submit_button("Ingresar al Sistema")
-            
-            if boton_ingresar:
-                if input_usuario == "admin_ancon" and input_clave == "Ancon2026*":
+    with st.form("login_general"):
+        input_usuario = st.text_input("Usuario asignado:")
+        input_clave = st.text_input("Contraseña:", type="password")
+        boton_ingresar = st.form_submit_button("Ingresar al Sistema")
+        
+        if boton_ingresar:
+            if input_usuario == "admin_ancon" and input_clave == "Ancon2026*":
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = "admin_ancon"
+                st.session_state["user_fullname"] = "Director Administrador"
+                st.session_state["user_role"] = "ADMIN"
+                st.session_state["requiere_cambio"] = 0
+                st.rerun()
+            else:
+                cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
+                datos_user = cursor.fetchone()
+                if datos_user and datos_user[0] == input_clave:
                     st.session_state["logged_in"] = True
-                    st.session_state["username"] = "admin_ancon"
-                    st.session_state["user_fullname"] = "Director Administrador"
-                    st.session_state["user_role"] = "ADMIN"
-                    st.session_state["requiere_cambio"] = 0
+                    st.session_state["username"] = input_usuario
+                    st.session_state["user_fullname"] = datos_user[1]
+                    st.session_state["user_role"] = "PERSONAL"
+                    st.session_state["requiere_cambio"] = datos_user[2]
                     st.rerun()
                 else:
-                    cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
-                    datos_user = cursor.fetchone()
-                    if datos_user and datos_user[0] == input_clave:
-                        st.session_state["logged_in"] = True
-                        st.session_state["username"] = input_usuario
-                        st.session_state["user_fullname"] = datos_user[1]
-                        st.session_state["user_role"] = "PERSONAL"
-                        st.session_state["requiere_cambio"] = datos_user[2]
-                        st.rerun()
-                    else:
-                        st.error("❌ Credenciales incorrectas o usuario no registrado.")
+                    st.error("❌ Credenciales incorrectas o usuario no registrado.")
 
-# -------------------------------------------------------------------------
-# SI EL USUARIO REQUIERE CAMBIO DE CONTRASEÑA OBLIGATORIO (PRIMER INGRESO)
-# -------------------------------------------------------------------------
+# CAMBIO DE CONTRASEÑA OBLIGATORIO PARA TRABAJADORES NUEVOS
 elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
     st.header("🔒 Cambio de Contraseña Obligatorio")
-    st.warning("Detectamos que estás ingresando con una contraseña temporal de la oficina. Por seguridad y confidencialidad, debes crear una contraseña nueva y secreta que solo tú conozcas antes de usar el portal.")
-    
+    st.warning("Detectamos que estás ingresando con una contraseña temporal. Por seguridad, debes crear una clave nueva y secreta antes de usar el portal.")
     with st.form("form_cambio_obligatorio"):
         nueva_clave_1 = st.text_input("Digita tu nueva contraseña secreta:", type="password")
         nueva_clave_2 = st.text_input("Confirma tu nueva contraseña secreta:", type="password")
         boton_salvar_clave = st.form_submit_button("Guardar mi Contraseña Privada")
-        
         if boton_salvar_clave:
             if nueva_clave_1 == "" or nueva_clave_2 == "":
                 st.error("❌ Por favor, rellene ambos campos.")
             elif nueva_clave_1 != nueva_clave_2:
-                st.error("❌ Las contraseñas no coinciden. Verifique bien lo que escribió.")
-            elif nueva_clave_1 == "Ancon123" or nueva_clave_1 == "Ancon2026":
-                st.error("❌ Por motivos de seguridad, no puede usar la clave genérica de la oficina. Invente una propia.")
+                st.error("❌ Las contraseñas no coinciden.")
+            elif nueva_clave_1 in ["Ancon123", "Ancon2026", "Temporal123"]:
+                st.error("❌ No puede usar una clave genérica de la oficina. Invente una propia.")
             else:
                 cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 0 WHERE usuario = ?", (nueva_clave_1, st.session_state["username"]))
                 conn.commit()
                 st.session_state["requiere_cambio"] = 0
-                st.success("🎉 ¡Contraseña guardada con éxito! Tu portal se ha desbloqueado de forma privada.")
-                st.balloons()
+                st.success("🎉 ¡Contraseña guardada con éxito! Tu portal se ha desbloqueado.")
                 st.rerun()
 
-# -------------------------------------------------------------------------
-# PORTAL ABIERTO EN PRODUCCIÓN (YA LOGUEADOS Y SEGUROS)
-# -------------------------------------------------------------------------
+# PORTAL OPERATIVO PRINCIPAL (LOGUEADOS)
 else:
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
@@ -119,9 +107,7 @@ else:
         st.session_state["user_role"] = ""
         st.rerun()
 
-    # ---------------------------------------------------------------------
-    # PERFIL DEL ADMINISTRADOR (JEFE PRINCIPAL)
-    # ---------------------------------------------------------------------
+    # PERFIL ADMINISTRADOR (JEFE)
     if st.session_state["user_role"] == "ADMIN":
         st.sidebar.markdown("### 👑 Menú de Dirección")
         menu_admin = st.sidebar.selectbox("Módulos de Gestión", [
@@ -134,45 +120,61 @@ else:
         
         if menu_admin == "👤 Registrar Nuevos Colaboradores":
             st.header("👤 Crear Cuenta de Acceso para el Personal")
-            st.info("El colaborador deberá cambiar esta clave temporal de forma obligatoria en su primer ingreso.")
             with st.form("form_crear_user", clear_on_submit=True):
                 col_u1, col_u2 = st.columns(2)
                 with col_u1:
                     new_nombre = st.text_input("Nombre Completo del Servidor Público:")
                     new_user = st.text_input("Crear Nombre de Usuario (ej: jose.perez):")
-                    new_clave = st.text_input("Asignar Contraseña Temporal de la Oficina:", type="password", value="Ancon123")
+                    new_clave = st.text_input("Asignar Contraseña Temporal:", type="password", value="Ancon123")
                 with col_u2:
                     new_cargo = st.text_input("Cargo / Posición:")
-                    new_area = st.selectbox("Área / Sección asignada:", ["Cuadrilla Compartida (16 op.)", "Atención Ciudadana", "Administración", "Ornato", "Relaciones Públicas"])
+                    new_area = st.selectbox("Área / Sección:", ["Cuadrilla Compartida (16 op.)", "Atención Ciudadana", "Administración", "Ornato", "Relaciones Públicas"])
                 boton_crear_cuenta = st.form_submit_button("Sellar Registro y Crear Cuenta")
                 if boton_crear_cuenta:
                     if new_nombre == "" or new_user == "" or new_clave == "":
                         st.error("❌ Por favor, rellene todos los campos.")
                     else:
                         try:
-                            cursor.execute("""
-                                INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio)
-                                VALUES (?, ?, ?, ?, ?, 1)
-                            """, (new_user, new_clave, new_nombre, new_cargo, new_area))
+                            cursor.execute("INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio) VALUES (?, ?, ?, ?, ?, 1)", (new_user, new_clave, new_nombre, new_cargo, new_area))
                             conn.commit()
-                            st.success(f"🎉 Cuenta creada para {new_nombre}. Al ingresar con el usuario '{new_user}', el sistema le obligará a crear su propia clave.")
+                            st.success(f"🎉 Cuenta creada para {new_nombre}.")
                         except:
-                            st.error("❌ El nombre de usuario ya existe. Elija otro diferente.")
+                            st.error("❌ El usuario ya existe.")
 
-        # NUEVO MÓDULO: RESETEO DE CONTRASEÑAS POR OLVIDO
         elif menu_admin == "🔑 Resetear Contraseña de Operario":
             st.header("🔑 Blanquear / Restablecer Contraseña por Olvido")
-            st.info("Utilice este panel si a un colaborador se le olvidó su contraseña secreta para asignarle una nueva clave temporal.")
-            
-            cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
-            lista_usuarios = cursor.fetchall()
-            
-            if lista_usuarios:
+            with st.form("form_reseteo_admin"):
+                cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
+                lista_usuarios = cursor.fetchall()
                 opciones_usuarios = {f"{u[1]} ({u[0]})": u[0] for u in lista_usuarios}
-                seleccionado = st.selectbox("Seleccione el Trabajador a Blanquear:", list(opciones_usuarios.keys()))
-                user_a_cambiar = opciones_usuarios[seleccionado]
-                
-                clave_reseteo = st.text_input("Escriba la nueva contraseña temporal para este empleado:", type="password", value="Temporal123")
-                boton_resetear = st.form_submit_button("Forzar Restablecimiento de Clave")
-                
-                if boton_resetear:
+                if opciones_usuarios:
+                    seleccionado = st.selectbox("Seleccione el Trabajador:", list(opciones_usuarios.keys()))
+                    user_a_cambiar = opciones_usuarios[seleccionado]
+                    clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123")
+                    boton_resetear = st.form_submit_button("Forzar Restablecimiento de Clave")
+                    if boton_resetear:
+                        cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 1 WHERE usuario = ?", (clave_reseteo, user_a_cambiar))
+                        conn.commit()
+                        st.success(f"✔️ Contraseña restablecida con éxito para {seleccionado}.")
+                else:
+                    st.warning("No hay operarios registrados.")
+
+        elif menu_admin == "📥 Bandeja de Solicitudes Pendientes":
+            st.header("📥 Solicitudes Pendientes por Validar")
+            pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
+            if not pendientes.empty:
+                for index, fila in pendientes.iterrows():
+                    tipo = fila['tipo_movimiento']
+                    color_tipo = f"🟢 SOLICITUD DE HORAS EXTRAS (+)" if tipo == 'INGRESO' else f"🔴 SOLICITUD DE DÍA LIBRE (-)"
+                    with st.expander(f"{color_tipo} | Empleado: {fila['nombre']} — Fecha: {fila['fecha']}"):
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.markdown(f"**Cargo:** {fila['cargo']} | **Área:** {fila['area']}")
+                            st.markdown(f"**Horas:** {abs(fila['total_horas'])} hrs")
+                        with col_b:
+                            st.markdown(f"**Motivo:** {fila['motivo']}")
+                        with col_c:
+                            if tipo == 'INGRESO' and fila['evidencia'] is not None:
+                                st.image(fila['evidencia'], width=300)
+                        col_btn1, col_btn2, _ = st.columns(3)
+                        with col_btn1:
