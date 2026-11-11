@@ -83,11 +83,19 @@ if not st.session_state["logged_in"]:
                         st.error("❌ Credenciales incorrectas o usuario no registrado.")
 
 # -------------------------------------------------------------------------
-# SI YA INICIÓ SESIÓN: DESPLEGAR LOS MÓDULOS CORRESPONDIENTES
+# SI YA INICIÓ SESIÓN: DESPLEGAR LOS MÓDULOS SEGÚN EL ROL
 # -------------------------------------------------------------------------
 else:
+    # BOTÓN PARA CERRAR SESIÓN SIEMPRE VISIBLE EN LA BARRA LATERAL
+    if st.sidebar.button("🚪 Cerrar Sesión"):
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = ""
+        st.session_state["user_fullname"] = ""
+        st.session_state["user_role"] = ""
+        st.rerun()
+
     # ---------------------------------------------------------------------
-    # MENÚ PARA EL ROL DEL ADMINISTRADOR (JEFE PRINCIPAL)
+    # PERFIL DEL ADMINISTRADOR (JEFE PRINCIPAL)
     # ---------------------------------------------------------------------
     if st.session_state["user_role"] == "ADMIN":
         st.sidebar.markdown("### 👑 Menú de Dirección")
@@ -98,15 +106,6 @@ else:
             "📚 Historial de Auditoría"
         ])
         
-        st.sidebar.markdown("---")
-        if st.sidebar.button("🚪 Cerrar Sesión", key="btn_out_admin"):
-            st.session_state["logged_in"] = False
-            st.session_state["username"] = ""
-            st.session_state["user_fullname"] = ""
-            st.session_state["user_role"] = ""
-            st.rerun()
-            
-        # EJECUCIÓN MÓDULO 1: REGISTRAR NUEVOS TRABAJADORES (PUESTO DE PRIMERO)
         if menu_admin == "👤 Registrar Nuevos Colaboradores":
             st.header("👤 Crear Cuenta de Acceso para el Personal")
             st.info("Utilice este formulario para registrar un operario y generarle su usuario y clave institucional.")
@@ -183,3 +182,4 @@ else:
                 st.warning("No hay horas aprobadas consolidadas en este periodo.")
 
         elif menu_admin == "📚 Historial de Auditoría":
+            st.header("📚 Historial de Transacciones de la Planilla")
