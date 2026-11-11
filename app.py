@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 
-# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL (MARGEN DE ERROR CERO)
+# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL (CON REVISIÓN DE ÍNDICES)
 def conectar_db():
     conn = sqlite3.connect("control_horas_comunal.db")
     cursor = conn.cursor()
@@ -26,7 +26,7 @@ def conectar_db():
         )
     ''')
     cursor.execute("SELECT COUNT(*) FROM usuarios_personal")
-    if cursor.fetchone() == 0:
+    if cursor.fetchone()[0] == 0:
         cursor.execute("""
             INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio)
             VALUES ('operario.ancon', 'Ancon123', 'Juan Pérez', 'Operador de Campo', 'Cuadrilla Compartida (16 op.)', 1)
@@ -73,12 +73,12 @@ if not st.session_state["logged_in"]:
             else:
                 cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
                 datos_user = cursor.fetchone()
-                if datos_user and datos_user == input_clave:
+                if datos_user and datos_user[0] == input_clave:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = input_usuario
-                    st.session_state["user_fullname"] = datos_user
+                    st.session_state["user_fullname"] = datos_user[1]
                     st.session_state["user_role"] = "PERSONAL"
-                    st.session_state["requiere_cambio"] = datos_user
+                    st.session_state["requiere_cambio"] = datos_user[2]
                     st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas o usuario no registrado.")
@@ -154,32 +154,30 @@ else:
                             st.success(f"🎉 Cuenta creada con éxito para {new_nombre}.")
                         except:
                             st.error("❌ El usuario ya existe.")
+            
+            st.markdown("---")
+            st.subheader("📋 Lista de Personal Registrado en el Sistema")
+            df_usuarios = pd.read_sql_query("SELECT usuario as 'Usuario', nombre_completo as 'Nombre', cargo as 'Cargo', area as 'Área asignada' FROM usuarios_personal", conn)
+            st.dataframe(df_usuarios, use_container_width=True, hide_index=True)
 
         elif menu_admin == "🔑 Resetear Contraseña de Operario":
             st.header("🔑 Blanquear / Restablecer Contraseña por Olvido")
             with st.form("form_reseteo_admin"):
                 cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
                 lista_usuarios = cursor.fetchall()
-                opciones_usuarios = {f"{u} ({u})": u for u in lista_usuarios}
+                
+                # CORRECCIÓN DE ÍNDICE FILTRADO PARA ENVIAR SOLO EL STRING LIMPIO DEL USUARIO
+                opciones_usuarios = {f"{u[1]} (Usuario: {u[0]})": u[0] for u in lista_usuarios}
+                
                 if opciones_usuarios:
-                    seleccionado = st.selectbox("Seleccione el Trabajador:", list(opciones_usuarios.keys()))
+                    seleccionado = st.selectbox("Seleccione el Trabajador a Restablecer:", list(opciones_usuarios.keys()))
                     user_a_cambiar = opciones_usuarios[seleccionado]
-                    clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123")
+                    
+                    clave_reseteo = st.text_input("Asignar nueva contraseña temporal:", type="password", value="Temporal123")
                     boton_resetear = st.form_submit_button("Forzar Restablecimiento de Clave")
+                    
                     if boton_resetear:
                         cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 1 WHERE usuario = ?", (clave_reseteo, user_a_cambiar))
                         conn.commit()
-                        st.success(f"✔️ Contraseña restablecida con éxito para {seleccionado}.")
+                        st.success(f"✔️ Contraseña restablecida con éxito. La clave provisional para el usuario '{user_a_cambiar}' ahora es '{clave_reseteo}'. El sistema le exigirá cambiarla al entrar.")
                 else:
-                    st.warning("No hay operarios registrados.")
-
-        elif menu_admin == "📥 Bandeja de Solicitudes Pendientes":
-            st.header("📥 Solicitudes Pendientes por Validar")
-            pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
-            if not pendientes.empty:
-                for index, fila in pendientes.iterrows():
-                    tipo = fila['tipo_movimiento']
-                    label_movimiento = "🟢 HORAS EXTRAS (+)" if tipo == 'INGRESO' else "🔴 DÍA LIBRE (-)"
-                    
-                    st.markdown("---")
-                    st.markdown(f"### {label_movimiento} | Empleado: **{fila['nombre']}** — Fecha: {fila['fecha']}")
