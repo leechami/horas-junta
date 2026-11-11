@@ -28,7 +28,7 @@ def conectar_db():
     ''')
     # Crear un usuario de prueba inicial si la tabla está vacía
     cursor.execute("SELECT COUNT(*) FROM usuarios_personal")
-    if cursor.fetchone()[0] == 0:
+    if cursor.fetchone() == 0:
         cursor.execute("""
             INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area)
             VALUES ('operario.ancon', 'Ancon123', 'Juan Pérez', 'Operador de Campo', 'Cuadrilla Compartida (16 op.)')
@@ -40,7 +40,7 @@ st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
 st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Portal Seguro de Cuentas")
 
-# INICIALIZAR VARIABLES DE SESIÓN PARA SEGURIDAD (REVISADO Y CORREGIDO)
+# INICIALIZAR VARIABLES DE SESIÓN PARA SEGURIDAD
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "username" not in st.session_state:
@@ -67,14 +67,12 @@ if not st.session_state["logged_in"]:
             boton_ingresar = st.form_submit_button("Ingresar al Sistema")
             
             if boton_ingresar:
-                # Verificar primero si es el administrador principal
                 if input_usuario == "admin_ancon" and input_clave == "Ancon2026*":
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = "admin_ancon"
                     st.session_state["user_role"] = "ADMIN"
                     st.rerun()
                 else:
-                    # Verificar si es un trabajador registrado en la base de datos
                     cursor.execute("SELECT contrasena, nombre_completo, cargo FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
                     datos_user = cursor.fetchone()
                     if datos_user and datos_user[0] == input_clave:
@@ -90,7 +88,6 @@ if not st.session_state["logged_in"]:
 # SI YA INICIÓ SESIÓN: DESPLEGAR LOS MÓDULOS CORRESPONDIENTES
 # -------------------------------------------------------------------------
 else:
-    # Botón para cerrar sesión en la barra lateral
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
         st.session_state["username"] = ""
@@ -108,19 +105,16 @@ else:
             "🔻 Solicitar Día Compensatorio (-)"
         ])
         
-        # Recuperar datos completos en vivo del trabajador logueado
         cursor.execute("SELECT nombre_completo, cargo, area FROM usuarios_personal WHERE usuario = ?", (st.session_state["username"],))
         info_emp = cursor.fetchone()
         emp_nombre, emp_cargo, emp_area = info_emp[0], info_emp[1], info_emp[2]
 
-        # SUB-MÓDULO A: CONSULTAR MI PROPIO SALDO E HISTORIAL CON ESTATUS
         if menu_personal == "📊 Mi Panel y Estatus de Solicitudes":
             st.header(f"👋 ¡Bienvenido, {emp_nombre}!")
             
-            # Calcular saldo neto privado del empleado logueado (solo transacciones Aprobadas)
             cursor.execute("SELECT SUM(total_horas) FROM registro_horas WHERE nombre = ? AND estado = 'Aprobado'", (emp_nombre,))
-            saldo_res = cursor.fetchone()[0]
-            saldo_neto = saldo_res if saldo_res is not None else 0.0
+            saldo_res = cursor.fetchone()
+            saldo_neto = saldo_res[0] if (saldo_res and saldo_res[0] is not None) else 0.0
             
             st.metric(label="⌛ Tu Saldo de Horas Disponibles a Favor:", value=f"{saldo_neto} hrs")
             
@@ -136,7 +130,6 @@ else:
             else:
                 st.caption("Aún no has enviado ninguna solicitud al sistema.")
 
-        # SUB-MÓDULO B: REPORTAR EXTRAS DESDE PERFIL LOGUEADO
         elif menu_personal == "✍️ Reportar Horas Extras (+)":
             st.header("✍️ Reportar Jornada Extraordinaria")
             st.caption(f"Registrando como: **{emp_nombre}** | Cargo: {emp_cargo} | Área: {emp_area}")
@@ -175,7 +168,6 @@ else:
                         conn.commit()
                         st.success(f"✔️ Solicitud registrada. Total calculado: {total_horas_calculadas} hrs. Esperando revisión del jefe.")
 
-        # SUB-MÓDULO C: REPORTAR COMPENSATORIOS DESDE PERFIL LOGUEADO
         elif menu_personal == "🔻 Solicitar Día Compensatorio (-)":
             st.header("🔻 Solicitar Uso de Tiempo Libre / Día Compensatorio")
             st.caption(f"Registrando como: **{emp_nombre}**")
@@ -186,3 +178,13 @@ else:
                     fecha_libre = st.date_input("Fecha exacta solicitada para el día libre:", value=datetime.today())
                     dia_libre_semana = st.selectbox("Día de la semana solicitado:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
                 with col_c2:
+                    horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej: 8.0 para un día entero):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
+                
+                motivo_libre = st.text_area("Justificación del tiempo libre solicitado:")
+                enviar_libre = st.form_submit_button("Enviar Solicitud de Tiempo Libre")
+                
+                if enviar_libre:
+                    if motivo_libre == "":
+                        st.error("❌ El motivo es obligatorio.")
+                    else:
+                        fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
