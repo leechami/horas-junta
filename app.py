@@ -170,17 +170,3 @@ else:
                 st.markdown("---")
                 st.markdown("#### 2. Eliminar Cuenta por Baja Completa")
                 st.warning(f"⚠️ ¡Cuidado! Si presiona el botón de abajo, se borrará de forma permanente el acceso del colaborador '{user_a_cambiar}'.")
-                if st.button("🗑️ Eliminar Login de Colaborador del Sistema", key="btn_eliminar_user"):
-                    cursor.execute("DELETE FROM usuarios_personal WHERE usuario = ?", (user_a_cambiar,))
-                    conn.commit()
-                    st.success(f"🗑️ El usuario '{user_a_cambiar}' ha sido borrado del sistema con éxito.")
-                    st.rerun()
-            else:
-                st.warning("No hay operarios registrados.")
-
-        elif menu_admin == "📥 Bandeja de Solicitudes Pendientes":
-            st.header("📥 Solicitudes Pendientes por Validar")
-            pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
-            if not pendientes.empty:
-                for index, fila in pendientes.iterrows():
-                    tipo = fila['tipo_movimiento']
