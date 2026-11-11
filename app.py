@@ -40,11 +40,15 @@ st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
 st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Portal Seguro de Cuentas")
 
-# INICIALIZAR VARIABLES DE SESIÓN PARA SEGURIDAD
-if "logged_in" not Locke_state: st.session_state["logged_in"] = False
-if "username" not in st.session_state: st.session_state["username"] = ""
-if "user_fullname" not in st.session_state: st.session_state["user_fullname"] = ""
-if "user_role" not in st.session_state: st.session_state["user_role"] = ""
+# INICIALIZAR VARIABLES DE SESIÓN PARA SEGURIDAD (REVISADO Y CORREGIDO)
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
+if "user_fullname" not in st.session_state:
+    st.session_state["user_fullname"] = ""
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = ""
 
 conn = conectar_db()
 cursor = conn.cursor()
@@ -109,7 +113,7 @@ else:
         info_emp = cursor.fetchone()
         emp_nombre, emp_cargo, emp_area = info_emp[0], info_emp[1], info_emp[2]
 
-        # SUB-MÓDULO A: CONSULTAR MI PROPIO SALDO Y HISTORIAL CON ESTATUS
+        # SUB-MÓDULO A: CONSULTAR MI PROPIO SALDO E HISTORIAL CON ESTATUS
         if menu_personal == "📊 Mi Panel y Estatus de Solicitudes":
             st.header(f"👋 ¡Bienvenido, {emp_nombre}!")
             
