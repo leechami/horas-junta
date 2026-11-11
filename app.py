@@ -121,7 +121,7 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
         
         if enviar_libre:
             if nombre_libre == "" or motivo_libre == "":
-                st.error("❌ Por favor, rellene su nombre y el motivo de la ausencia.")
+                st.error("❌ Por favor, rellene su nombre and el motivo de la ausencia.")
             else:
                 fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
                 horas_negativas = -float(horas_solicitadas)
