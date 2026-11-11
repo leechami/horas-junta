@@ -1,47 +1,42 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
-import os
 from datetime import datetime
 import base64
 
-# CONFIGURACIÓN DEL ARCHIVO EXCEL COMO BASE DE DATOS EN GITHUB
-EXCEL_FILE = "base_datos_horas.xlsx"
-
-def conectar_db_excel():
-    if not os.path.exists(EXCEL_FILE):
-        df = pd.DataFrame(columns=[
-            "id", "nombre", "fecha", "dia", "area", "cargo", 
-            "hora_inicio", "hora_fin", "motivo", "total_horas", "estado", "evidencia", "tipo_movimiento"
-        ])
-        df.to_excel(EXCEL_FILE, index=False)
-    try:
-        return pd.read_excel(EXCEL_FILE)
-    except:
-        return pd.DataFrame(columns=[
-            "id", "nombre", "fecha", "dia", "area", "cargo", 
-            "hora_inicio", "hora_fin", "motivo", "total_horas", "estado", "evidencia", "tipo_movimiento"
-        ])
-
-def guardar_db_excel(df):
-    df.to_excel(EXCEL_FILE, index=False)
+# CONFIGURACIÓN DE LA BASE DE DATOS LOCAL
+def conectar_db():
+    conn = sqlite3.connect("control_horas_comunal.db")
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS registro_horas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT, fecha TEXT, dia TEXT, area TEXT, cargo TEXT,
+            hora_inicio TEXT, hora_fin TEXT, motivo TEXT,
+            total_horas REAL, estado TEXT, evidencia BLOB, tipo_movimiento TEXT
+        )
+    ''')
+    conn.commit()
+    return conn
 
 st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
-st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
-st.markdown("### Junta Comunal de Ancón — Almacenamiento Seguro en Excel")
+st.title("🏛 Sistema de Control de Horas Extras y Compensatorios")
+st.markdown("### Junta Comunal de Ancón — Portal de Autoservicio")
 
 menu = st.sidebar.selectbox("Seleccione el Módulo", [
-    "✍️ Reportar Horas Extras (Suma)", 
+    "✍ Reportar Horas Extras (Suma)", 
     "🔻 Solicitar Día Compensatorio (Resta)",
     "🔐 Panel de Control (Administrador)"
 ])
 
-df_horas = conectar_db_excel()
+conn = conectar_db()
+cursor = conn.cursor()
 
 # -------------------------------------------------------------------------
 # MÓDULO 1: REPORTAR HORAS EXTRAS (Para sumar horas)
 # -------------------------------------------------------------------------
-if menu == "✍️ Reportar Horas Extras (Suma)":
-    st.header("✍️ Formulario para Reportar Horas Extras")
+if menu == "✍ Reportar Horas Extras (Suma)":
+    st.header("✍ Formulario para Reportar Horas Extras")
     st.info("Utilice este formulario si realizó labores extraordinarias y desea que se sumen a su saldo.")
     
     with st.form("formulario_horas", clear_on_submit=True):
@@ -64,7 +59,7 @@ if menu == "✍️ Reportar Horas Extras (Suma)":
             hora_fin = st.time_input("Hora de Finalización:")
             
         st.markdown("#### 📷 Evidencia Física")
-        foto_adjunta = st.file_uploader("Adjuntar foto de la nota firmada o comprobante:", type=["png", "jpg", "jpeg"])
+        foto_adjunta = st.file_uploader("Adjuntar foto de la nota firmada o comprobante del trabajo:", type=["png", "jpg", "jpeg"])
             
         enviar = st.form_submit_button("Enviar Solicitud de Horas Extras")
         
@@ -82,21 +77,16 @@ if menu == "✍️ Reportar Horas Extras (Suma)":
                 total_horas_calculadas = round(diferencia.seconds / 3600, 2)
                 fecha_str = fecha_input.strftime("%d/%m/%Y")
                 
-                foto_base64 = ""
+                foto_bytes = None
                 if foto_adjunta is not None:
-                    foto_base64 = base64.b64encode(foto_adjunta.read()).decode()
+                    foto_bytes = foto_adjunta.read()
                 
-                nuevo_id = len(df_horas) + 1
-                nueva_fila = {
-                    "id": nuevo_id, "nombre": nombre, "fecha": fecha_str, "dia": dia_semana, 
-                    "area": area, "cargo": cargo, "hora_inicio": str(hora_inicio), "hora_fin": str(hora_fin), 
-                    "motivo": motivo, "total_horas": total_horas_calculadas, "estado": "Pendiente", 
-                    "evidencia": foto_base64, "tipo_movimiento": "INGRESO"
-                }
-                
-                df_horas = pd.concat([df_horas, pd.DataFrame([nueva_fila])], ignore_index=True)
-                guardar_db_excel(df_horas)
-                st.success(f"✔️ Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
+                cursor.execute('''
+                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')
+                ''', (nombre, fecha_str, dia_semana, area, cargo, str(hora_inicio), str(hora_fin), motivo, total_horas_calculadas, foto_bytes))
+                conn.commit()
+                st.success(f"✔ Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
 
 # -------------------------------------------------------------------------
 # MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas)
@@ -121,22 +111,17 @@ elif menu == "🔻 Solicitar Día Compensatorio (Resta)":
         
         if enviar_libre:
             if nombre_libre == "" or motivo_libre == "":
-                st.error("❌ Por favor, rellene su nombre and el motivo de la ausencia.")
+                st.error("❌ Por favor, rellene su nombre y el motivo de la ausencia.")
             else:
                 fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
                 horas_negativas = -float(horas_solicitadas)
                 
-                nuevo_id = len(df_horas) + 1
-                nueva_fila = {
-                    "id": nuevo_id, "nombre": nombre_libre, "fecha": fecha_libre_str, "dia": dia_libre_semana, 
-                    "area": "Uso de Tiempo", "cargo": cargo_libre, "hora_inicio": "N/A", "hora_fin": "N/A", 
-                    "motivo": motivo_libre, "total_horas": horas_negativas, "estado": "Pendiente", 
-                    "evidencia": "", "tipo_movimiento": "REDUCCION"
-                }
-                
-                df_horas = pd.concat([df_horas, pd.DataFrame([nueva_fila])], ignore_index=True)
-                guardar_db_excel(df_horas)
-                st.success(f"🔻 Solicitud enviada. Esperando aprobación del jefe para descontar {horas_solicitadas} hrs el día {dia_libre_semana}.")
+                cursor.execute('''
+                    INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento)
+                    VALUES (?, ?, ?, 'Uso de Tiempo', ?, 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
+                ''', (nombre_libre, fecha_libre_str, dia_libre_semana, cargo_libre, motivo_libre, horas_negativas))
+                conn.commit()
+                st.success(f"🔻 Solicitud enviada. Esperando aprobación del jefe para descontar {horas_solicitadas} hrs el día {dia_libre_semana} {fecha_libre_str}.")
 
 # -------------------------------------------------------------------------
 # MÓDULO 3: PANEL DE CONTROL ADMINISTRATIVO (PRIVADO)
@@ -162,21 +147,25 @@ elif menu == "🔐 Panel de Control (Administrador)":
         
         # 1. Bolsa Acumulativa General (PRIVADA)
         st.subheader("📊 Bolsa Acumulativa de Horas Reales Disponibles (Privado)")
+        resumen = pd.read_sql_query('''
+            SELECT nombre as 'Empleado', 
+                   SUM(total_horas) as 'Saldo de Horas Disponibles' 
+            FROM registro_horas 
+            WHERE estado = 'Aprobado' 
+            GROUP BY nombre
+        ''', conn)
         
-        df_aprobados = df_horas[df_horas["estado"] == "Aprobado"]
-        if not df_aprobados.empty:
-            resumen = df_aprobados.groupby("nombre")["total_horas"].sum().reset_index()
-            resumen.columns = ["Empleado", "Saldo de Horas Disponibles"]
+        if not resumen.empty:
             st.dataframe(resumen, use_container_width=True, hide_index=True)
         else:
-            st.warning("No hay horas aprobadas ni saldos consolidados en este periodo.")
+            st.warning("No hay horas aprobadas ni saldos acumulados en este periodo.")
             
         # 2. BANDEJA DE ENTRADA UNIFICADA DE PENDIENTES CON VISOR DE FOTOS
         st.subheader("📥 Solicitudes Pendientes por Aprobar o Rechazar")
-        df_pendientes = df_horas[df_horas["estado"] == "Pendiente"]
+        pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
         
-        if not df_pendientes.empty:
-            for index, fila in df_pendientes.iterrows():
+        if not pendientes.empty:
+            for index, fila in pendientes.iterrows():
                 tipo = fila['tipo_movimiento']
                 if tipo == 'INGRESO':
                     color_tipo = f"🟢 SOLICITUD DE HORAS EXTRAS (+) — Laboró el día: {fila['dia']}"
@@ -191,3 +180,12 @@ elif menu == "🔐 Panel de Control (Administrador)":
                             st.markdown(f"**Horas a sumar:** {fila['total_horas']} hrs")
                             st.markdown(f"**Horario:** {fila['hora_inicio']} a {fila['hora_fin']}")
                         else:
+                            st.markdown(f"**Horas a descontar:** {abs(fila['total_horas'])} hrs")
+                    with col_b:
+                        st.markdown(f"**Detalle / Motivo:** {fila['motivo']}")
+                    with col_c:
+                        if tipo == 'INGRESO' and fila['evidencia'] is not None:
+                            st.image(fila['evidencia'], caption="📷 Evidencia del Trabajo Realizado", width=350)
+                        else:
+                            st.caption("No requiere archivo de foto o es una solicitud de descanso.")
+                    
