@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 
-# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL
+# 1. CONFIGURACIÓN DE LA BASE DE DATOS INSTITUCIONAL (MARGEN DE ERROR CERO)
 def conectar_db():
     conn = sqlite3.connect("control_horas_comunal.db")
     cursor = conn.cursor()
@@ -38,16 +38,23 @@ st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
 st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Portal Seguro de Cuentas")
 
-if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-if "username" not in st.session_state: st.session_state["username"] = ""
-if "user_fullname" not in st.session_state: st.session_state["user_fullname"] = ""
-if "user_role" not in st.session_state: st.session_state["user_role"] = ""
-if "requiere_cambio" not in st.session_state: st.session_state["requiere_cambio"] = 0
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+if "username" not in st.session_state:
+    st.session_state["username"] = ""
+if "user_fullname" not in st.session_state:
+    st.session_state["user_fullname"] = ""
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = ""
+if "requiere_cambio" not in st.session_state:
+    st.session_state["requiere_cambio"] = 0
 
 conn = conectar_db()
 cursor = conn.cursor()
 
+# -------------------------------------------------------------------------
 # PANTALLA GENERAL: INICIO DE SESIÓN UNIFICADO (LOGIN)
+# -------------------------------------------------------------------------
 if not st.session_state["logged_in"]:
     st.subheader("🔐 Iniciar Sesión en el Portal")
     with st.form("login_general"):
@@ -76,14 +83,17 @@ if not st.session_state["logged_in"]:
                 else:
                     st.error("❌ Credenciales incorrectas o usuario no registrado.")
 
+# -------------------------------------------------------------------------
 # CAMBIO DE CONTRASEÑA OBLIGATORIO PARA TRABAJADORES NUEVOS
+# -------------------------------------------------------------------------
 elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
     st.header("🔒 Cambio de Contraseña Obligatorio")
-    st.warning("Detectamos que estás ingresando con una contraseña temporal. Por seguridad, debes crear una clave nueva y secreta antes de usar el portal.")
+    st.warning("Detectamos que estás ingresando con una contraseña temporal de la oficina. Por seguridad, debes crear una contraseña nueva y secreta que solo tú conozcas.")
     with st.form("form_cambio_obligatorio"):
         nueva_clave_1 = st.text_input("Digita tu nueva contraseña secreta:", type="password")
         nueva_clave_2 = st.text_input("Confirma tu nueva contraseña secreta:", type="password")
         boton_salvar_clave = st.form_submit_button("Guardar mi Contraseña Privada")
+        
         if boton_salvar_clave:
             if nueva_clave_1 == "" or nueva_clave_2 == "":
                 st.error("❌ Por favor, rellene ambos campos.")
@@ -98,7 +108,9 @@ elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
                 st.success("🎉 ¡Contraseña guardada con éxito! Tu portal se ha desbloqueado.")
                 st.rerun()
 
-# PORTAL OPERATIVO PRINCIPAL (LOGUEADOS)
+# -------------------------------------------------------------------------
+# PORTAL OPERATIVO PRINCIPAL (YA AUTENTICADOS CON ÉXITO)
+# -------------------------------------------------------------------------
 else:
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
@@ -107,7 +119,9 @@ else:
         st.session_state["user_role"] = ""
         st.rerun()
 
-    # PERFIL ADMINISTRADOR (JEFE)
+    # ---------------------------------------------------------------------
+    # PERFIL ADMINISTRADOR (JEFE DE LA JUNTA COMUNAL)
+    # ---------------------------------------------------------------------
     if st.session_state["user_role"] == "ADMIN":
         st.sidebar.markdown("### 👑 Menú de Dirección")
         menu_admin = st.sidebar.selectbox("Módulos de Gestión", [
@@ -137,7 +151,7 @@ else:
                         try:
                             cursor.execute("INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio) VALUES (?, ?, ?, ?, ?, 1)", (new_user, new_clave, new_nombre, new_cargo, new_area))
                             conn.commit()
-                            st.success(f"🎉 Cuenta creada para {new_nombre}.")
+                            st.success(f"🎉 Cuenta creada con éxito para {new_nombre}.")
                         except:
                             st.error("❌ El usuario ya existe.")
 
@@ -165,16 +179,5 @@ else:
             if not pendientes.empty:
                 for index, fila in pendientes.iterrows():
                     tipo = fila['tipo_movimiento']
-                    color_tipo = f"🟢 SOLICITUD DE HORAS EXTRAS (+)" if tipo == 'INGRESO' else f"🔴 SOLICITUD DE DÍA LIBRE (-)"
+                    color_tipo = "🟢 SOLICITUD DE HORAS EXTRAS (+)" if tipo == 'INGRESO' else "🔴 SOLICITUD DE DÍA LIBRE (-)"
                     with st.expander(f"{color_tipo} | Empleado: {fila['nombre']} — Fecha: {fila['fecha']}"):
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.markdown(f"**Cargo:** {fila['cargo']} | **Área:** {fila['area']}")
-                            st.markdown(f"**Horas:** {abs(fila['total_horas'])} hrs")
-                        with col_b:
-                            st.markdown(f"**Motivo:** {fila['motivo']}")
-                        with col_c:
-                            if tipo == 'INGRESO' and fila['evidencia'] is not None:
-                                st.image(fila['evidencia'], width=300)
-                        col_btn1, col_btn2, _ = st.columns(3)
-                        with col_btn1:
