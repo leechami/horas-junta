@@ -126,7 +126,7 @@ else:
         st.sidebar.markdown("### 👑 Menú de Dirección")
         menu_admin = st.sidebar.selectbox("Módulos de Gestión", [
             "👤 Registrar Nuevos Colaboradores",
-            "🔑 Resetear Contraseña de Operario",
+            "🔑 Resetear / Eliminar Operario",
             "📥 Bandeja de Solicitudes Pendientes",
             "📊 Bolsa Acumulativa General",
             "📚 Historial de Auditoría"
@@ -160,25 +160,24 @@ else:
             df_usuarios = pd.read_sql_query("SELECT usuario as 'Usuario', nombre_completo as 'Nombre', cargo as 'Cargo', area as 'Área asignada' FROM usuarios_personal", conn)
             st.dataframe(df_usuarios, use_container_width=True, hide_index=True)
 
-        elif menu_admin == "🔑 Resetear Contraseña de Operario":
-            st.header("🔑 Blanquear / Restablecer Contraseña por Olvido")
-            with st.form("form_reseteo_admin"):
-                cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
-                lista_usuarios = cursor.fetchall()
-                opciones_usuarios = {f"{u[1]} (Usuario: {u[0]})": str(u[0]) for u in lista_usuarios}
+        elif menu_admin == "🔑 Resetear / Eliminar Operario":
+            st.header("🔑 Gestión de Cuentas: Restablecer Clave o Eliminar Usuario")
+            cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
+            lista_usuarios = cursor.fetchall()
+            opciones_usuarios = {f"{u[1]} (Usuario: {u[0]})": str(u[0]) for u in lista_usuarios}
+            
+            if opciones_usuarios:
+                seleccionado = st.selectbox("Seleccione el Trabajador a Gestionar:", list(opciones_usuarios.keys()))
+                user_a_cambiar = opciones_usuarios[seleccionado]
                 
-                if opciones_usuarios:
-                    seleccionado = st.selectbox("Seleccione el Trabajador:", list(opciones_usuarios.keys()))
-                    user_a_cambiar = opciones_usuarios[seleccionado]
+                st.markdown("#### 1. Opción para Restablecer Contraseña")
+                with st.form("form_reseteo_admin"):
                     clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123")
                     boton_resetear = st.form_submit_button("Forzar Restablecimiento de Clave")
                     if boton_resetear:
                         cursor.execute("UPDATE usuarios_personal SET contrasena = ?, requiere_cambio = 1 WHERE usuario = ?", (clave_reseteo, user_a_cambiar))
                         conn.commit()
                         st.success(f"✔️ Contraseña restablecida con éxito para el usuario '{user_a_cambiar}'.")
-                else:
-                    st.warning("No hay operarios registrados.")
-
-        elif menu_admin == "📥 Bandeja de Solicitudes Pendientes":
-            st.header("📥 Solicitudes Pendientes por Validar")
-            pendientes = pd.read_sql_query("SELECT * FROM registro_horas WHERE estado = 'Pendiente'", conn)
+                
+                st.markdown("#### 2. Opción para Eliminar Cuenta por Baja Completa")
+                with st.form("form_eliminar_admin"):
