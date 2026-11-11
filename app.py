@@ -30,7 +30,7 @@ st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Almacenamiento Seguro en Excel")
 
 menu = st.sidebar.selectbox("Seleccione el Módulo", [
-    "✍ * Reportar Horas Extras (Suma)", 
+    "✍️ Reportar Horas Extras (Suma)", 
     "🔻 Solicitar Día Compensatorio (Resta)",
     "🔐 Panel de Control (Administrador)"
 ])
@@ -40,8 +40,8 @@ df_horas = conectar_db_excel()
 # -------------------------------------------------------------------------
 # MÓDULO 1: REPORTAR HORAS EXTRAS (Para sumar horas)
 # -------------------------------------------------------------------------
-if menu == "✍ * Reportar Horas Extras (Suma)":
-    st.header("✍ * Formulario para Reportar Horas Extras")
+if menu == "✍️ Reportar Horas Extras (Suma)":
+    st.header("✍️ Formulario para Reportar Horas Extras")
     st.info("Utilice este formulario si realizó labores extraordinarias y desea que se sumen a su saldo.")
     
     with st.form("formulario_horas", clear_on_submit=True):
@@ -96,7 +96,7 @@ if menu == "✍ * Reportar Horas Extras (Suma)":
                 
                 df_horas = pd.concat([df_horas, pd.DataFrame([nueva_fila])], ignore_index=True)
                 guardar_db_excel(df_horas)
-                st.success(f"✔ * Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
+                st.success(f"✔️ Solicitud de horas extras enviada al jefe. Total calculado: {total_horas_calculadas} hrs.")
 
 # -------------------------------------------------------------------------
 # MÓDULO 2: SOLICITAR DÍA COMPENSATORIO (Para restar horas)
