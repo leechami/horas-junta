@@ -187,8 +187,8 @@ else:
                     historial.to_excel(writer, index=False, sheet_name='Bitacora_Horas_Ancon')
                 st.download_button(label="📥 Descargar Libro Completo en Excel (.xlsx)", data=output.getvalue(), file_name="Planilla_Horas_Ancon.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        elif st.session_state["user_role"] == "PERSONAL":
-        emp_nombre = st.session_state["user_fullname"]
+            elif st.session_state["user_role"] == "PERSONAL":
+           emp_nombre = st.session_state["user_fullname"]
         st.sidebar.markdown(f"### 👨‍🔧 Panel de: \n**{emp_nombre}**")
         menu_personal = st.sidebar.selectbox("Acciones Disponibles", [
             "📊 Mi Panel y Estatus",
@@ -210,12 +210,13 @@ else:
             with st.form("form_extras_p", clear_on_submit=True):
                 fecha_input = st.date_input("Fecha de la Jornada:")
                 
-                horas_lista = [f"{h:02d}:{m:02d} {ampm}" for ampm in ["AM", "PM"] for h in ([12] + list(range(1, 12))) for m in]
+                horas_lista = ["06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM"]
+
                 col_h1, col_h2 = st.columns(2)
                 with col_h1:
-                    h_ini_str = st.selectbox("Hora de Inicio:", horas_lista, index=32)
+                    h_ini_str = st.selectbox("Hora de Inicio:", horas_lista, index=2)
                 with col_h2:
-                    h_fin_str = st.selectbox("Hora de Finalización:", horas_lista, index=68)
+                    h_fin_str = st.selectbox("Hora de Finalización:", horas_lista, index=11)
                 
                 motivo = st.text_area("Motivo de la jornada:")
                 foto_adjunta = st.file_uploader("Adjuntar foto de comprobante:", type=["png", "jpg", "jpeg"])
