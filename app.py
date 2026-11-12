@@ -12,9 +12,15 @@ def conectar_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT, fecha TEXT, dia TEXT, area TEXT, cargo TEXT,
             hora_inicio TEXT, hora_fin TEXT, motivo TEXT,
-            total_horas REAL, estado TEXT, evidencia BLOB, tipo_movimiento TEXT
+            total_horas REAL, estado TEXT, evidencia BLOB, tipo_movimiento TEXT,
+            motivo_rechazo TEXT DEFAULT ''
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE registro_horas ADD COLUMN motivo_rechazo TEXT DEFAULT ''")
+    except Exception:
+        pass
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios_personal (
             usuario TEXT PRIMARY KEY,
@@ -22,20 +28,35 @@ def conectar_db():
             nombre_completo TEXT,
             cargo TEXT,
             area TEXT,
-            requiere_cambio INTEGER DEFAULT 1
+            requiere_cambio INTEGER DEFAULT 1,
+            rol TEXT DEFAULT 'PERSONAL'
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE usuarios_personal ADD COLUMN rol TEXT DEFAULT 'PERSONAL'")
+    except Exception:
+        pass
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS areas_junta (
+            nombre_area TEXT PRIMARY KEY
+        )
+    """)
+    cursor.execute("SELECT COUNT(*) FROM areas_junta")
+    if cursor.fetchone()[0] == 0:
+        areas_base = [("Cuadrilla Compartida (16 op.)",), ("Atención Ciudadana",), ("Administración",), ("Ornato",), ("Relaciones Públicas",)]
+        cursor.executemany("INSERT INTO areas_junta (nombre_area) VALUES (?)", areas_base)
+    
+    conn.commit()
     return conn
 
 st.set_page_config(page_title="Portal de Horas - Junta Comunal", layout="wide")
 st.title("🏛️ Sistema de Control de Horas Extras y Compensatorios")
 st.markdown("### Junta Comunal de Ancón — Portal Seguro de Cuentas")
 
-if "logged_in" not in st.session_state: st.session_state["logged_in"] = False
-if "username" not in st.session_state: st.session_state["username"] = ""
-if "user_fullname" not in st.session_state: st.session_state["user_fullname"] = ""
-if "user_role" not in st.session_state: st.session_state["user_role"] = ""
-if "requiere_cambio" not in st.session_state: st.session_state["requiere_cambio"] = 0
+for key, val in [("logged_in", False), ("username", ""), ("user_fullname", ""), ("user_role", ""), ("user_area", ""), ("requiere_cambio", 0)]:
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 conn = conectar_db()
 cursor = conn.cursor()
@@ -51,16 +72,18 @@ if not st.session_state["logged_in"]:
                 st.session_state["username"] = "admin_ancon"
                 st.session_state["user_fullname"] = "Director Administrador"
                 st.session_state["user_role"] = "ADMIN"
+                st.session_state["user_area"] = "TODAS"
                 st.rerun()
             else:
-                cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
+                cursor.execute("SELECT contrasena, nombre_completo, requiere_cambio, rol, area FROM usuarios_personal WHERE usuario = ?", (input_usuario,))
                 datos_user = cursor.fetchone()
                 if datos_user and str(datos_user[0]) == str(input_clave):
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = input_usuario
                     st.session_state["user_fullname"] = str(datos_user[1])
                     st.session_state["requiere_cambio"] = int(datos_user[2])
-                    st.session_state["user_role"] = "PERSONAL"
+                    st.session_state["user_role"] = str(datos_user[3]) if datos_user[3] else "PERSONAL"
+                    st.session_state["user_area"] = str(datos_user[4]) if datos_user[4] else "General"
                     st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas.")
@@ -79,51 +102,73 @@ elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
                 st.session_state["requiere_cambio"] = 0
                 st.success("🎉 ¡Contraseña guardada con éxito!")
                 st.rerun()
-
 else:
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
         st.session_state["username"] = ""
         st.session_state["user_fullname"] = ""
         st.session_state["user_role"] = ""
+        st.session_state["user_area"] = ""
         st.rerun()
 
+    cursor.execute("SELECT nombre_area FROM areas_junta")
+    lista_areas_db = [a[0] for a in cursor.fetchall()]
+
     if st.session_state["user_role"] == "ADMIN":
-        st.sidebar.markdown("### 👑 Menú de Dirección")
+        st.sidebar.markdown("### 👑 Menú Administrador Total")
         menu_admin = st.sidebar.selectbox("Módulos de Gestión", [
-            "👤 Registrar Nuevos Colaboradores",
-            "🔑 Resetear / Eliminar Operario",
+            "🏢 Gestionar Áreas de la Junta",
+            "👤 Registrar Personal o Jefe (Manager)",
+            "🔑 Resetear / Eliminar Cuenta",
             "📊 Cargar Horas Manuales RRHH",
-            "📥 Bandeja de Aprobaciones Rápidas",
+            "📥 Bandeja General de Aprobaciones",
             "📊 Bolsa Acumulativa General",
             "📚 Historial de Auditoría"
         ])
         
-        if menu_admin == "👤 Registrar Nuevos Colaboradores":
-            st.header("👤 Crear Cuenta de Acceso para el Personal")
+        if menu_admin == "🏢 Gestionar Áreas de la Junta":
+            st.header("🏢 Agregar Nuevas Áreas o Departamentos")
+            with st.form("form_nueva_area", clear_on_submit=True):
+                nueva_area_txt = st.text_input("Nombre de la nueva área (ej: Infraestructura, Deportes, Cultura):")
+                if st.form_submit_button("Agregar Área"):
+                    if nueva_area_txt.strip() != "":
+                        try:
+                            cursor.execute("INSERT INTO areas_junta (nombre_area) VALUES (?)", (nueva_area_txt.strip(),))
+                            conn.commit()
+                            st.success(f"✔️ Área '{nueva_area_txt}' agregada con éxito.")
+                            st.rerun()
+                        except Exception:
+                            st.error("❌ Esa área ya existe.")
+            st.markdown("---")
+            st.subheader("📋 Áreas Activas en el Sistema")
+            st.dataframe(pd.DataFrame(lista_areas_db, columns=["Áreas Registradas"]), use_container_width=True, hide_index=True)
+
+        elif menu_admin == "👤 Registrar Personal o Jefe (Manager)":
+            st.header("👤 Crear Cuenta para Personal o Jefe de Área")
             with st.form("form_crear_user", clear_on_submit=True):
                 new_nombre = st.text_input("Nombre Completo:")
                 new_user = st.text_input("Nombre de Usuario (ej: jose.perez):")
                 new_clave = st.text_input("Contraseña Temporal:", type="password", value="Ancon123")
                 new_cargo = st.text_input("Cargo:")
-                new_area = st.selectbox("Área:", ["Cuadrilla Compartida (16 op.)", "Atención Ciudadana", "Administración", "Ornato", "Relaciones Públicas"])
+                new_area = st.selectbox("Área Asignada:", lista_areas_db)
+                new_rol = st.selectbox("Nivel de Acceso:", ["PERSONAL", "MANAGER"])
                 if st.form_submit_button("Sellar Registro y Crear Cuenta"):
                     try:
-                        cursor.execute("INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio) VALUES (?, ?, ?, ?, ?, 1)", (new_user, new_clave, new_nombre, new_cargo, new_area))
+                        cursor.execute("INSERT INTO usuarios_personal (usuario, contrasena, nombre_completo, cargo, area, requiere_cambio, rol) VALUES (?, ?, ?, ?, ?, 1, ?)", (new_user, new_clave, new_nombre, new_cargo, new_area, new_rol))
                         conn.commit()
-                        st.success(f"🎉 Cuenta creada para {new_nombre}.")
+                        st.success(f"🎉 Cuenta creada para {new_nombre} con nivel {new_rol}.")
                     except Exception:
                         st.error("❌ El usuario ya existe.")
             st.markdown("---")
-            df_usuarios = pd.read_sql_query("SELECT usuario as 'Usuario', nombre_completo as 'Nombre', cargo as 'Cargo', area as 'Área asignada' FROM usuarios_personal", conn)
+            df_usuarios = pd.read_sql_query("SELECT usuario as 'Usuario', nombre_completo as 'Nombre', cargo as 'Cargo', area as 'Área', rol as 'Nivel' FROM usuarios_personal", conn)
             st.dataframe(df_usuarios, use_container_width=True, hide_index=True)
 
-        elif menu_admin == "🔑 Resetear / Eliminar Operario":
+        elif menu_admin == "🔑 Resetear / Eliminar Cuenta":
             st.header("🔑 Gestión de Cuentas")
-            cursor.execute("SELECT usuario, nombre_completo FROM usuarios_personal")
-            opciones_usuarios = {f"{u[1]} (Usuario: {u[0]})": str(u[0]) for u in cursor.fetchall()}
+            cursor.execute("SELECT usuario, nombre_completo, rol FROM usuarios_personal")
+            opciones_usuarios = {f"{u[1]} ({u[2]} - Usuario: {u[0]})": str(u[0]) for u in cursor.fetchall()}
             if opciones_usuarios:
-                seleccionado = st.selectbox("Seleccione el Trabajador:", list(opciones_usuarios.keys()))
+                seleccionado = st.selectbox("Seleccione el Usuario:", list(opciones_usuarios.keys()))
                 user_a_cambiar = opciones_usuarios[seleccionado]
                 clave_reseteo = st.text_input("Nueva contraseña temporal:", type="password", value="Temporal123")
                 if st.button("Forzar Restablecimiento de Clave"):
@@ -131,55 +176,61 @@ else:
                     conn.commit()
                     st.success("✔️ Contraseña restablecida.")
                 st.markdown("---")
-                if st.button("🗑️ Eliminar Login de Colaborador del Sistema"):
+                if st.button("🗑️ Eliminar Cuenta del Sistema"):
                     cursor.execute("DELETE FROM usuarios_personal WHERE usuario = ?", (user_a_cambiar,))
                     conn.commit()
-                    st.success("🗑️ Usuario eliminado.")
+                    st.success("🗑️ Cuenta eliminada.")
                     st.rerun()
 
         elif menu_admin == "📊 Cargar Horas Manuales RRHH":
             st.header("📊 Cargar Historial de Horas Extras de RRHH")
-            cursor.execute("SELECT nombre_completo FROM usuarios_personal")
-            opciones_personal = [p[0] for p in cursor.fetchall()]
+            cursor.execute("SELECT nombre_completo, area FROM usuarios_personal WHERE rol = 'PERSONAL'")
+            lista_p = cursor.fetchall()
+            opciones_personal = {f"{p[0]} ({p[1]})": (p[0], p[1]) for p in lista_p}
             if opciones_personal:
-                colab_sel = st.selectbox("Seleccione el Funcionario:", opciones_personal)
+                colab_sel = st.selectbox("Seleccione el Funcionario:", list(opciones_personal.keys()))
+                nombre_p, area_p = opciones_personal[colab_sel]
                 horas_manuales = st.number_input("Horas Extras a Sumar:", min_value=0.5, max_value=500.0, value=10.0, step=0.5)
                 motivo_manual = st.text_area("Justificación:", value="Saldo histórico acumulado según reportes físicos de RRHH.")
                 if st.button("🟢 Sellar y Cargar Horas a la Bolsa"):
                     fecha_hoy = datetime.today().strftime("%d/%m/%Y")
-                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Recursos Humanos', 'Operario', 'N/A', 'N/A', ?, ?, 'Aprobado', None, 'INGRESO')", (colab_sel, fecha_hoy, motivo_manual, float(horas_manuales)))
+                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento, motivo_rechazo) VALUES (?, ?, 'N/A', ?, 'Operario', 'N/A', 'N/A', ?, ?, 'Aprobado', None, 'INGRESO', '')", (nombre_p, fecha_hoy, area_p, motivo_manual, float(horas_manuales)))
                     conn.commit()
-                    st.success(f"🎉 Se han inyectado {horas_manuales} horas aprobadas a {colab_sel}.")
-        elif menu_admin == "📥 Bandeja de Aprobaciones Rápidas":
-            st.header("📥 Control de Solicitudes Pendientes")
-            pendientes = pd.read_sql_query("SELECT id as 'ID', nombre as 'Empleado', fecha as 'Fecha', hora_inicio as 'Desde', hora_fin as 'Hasta', total_horas as 'Horas', motivo as 'Motivo/Detalle' FROM registro_horas WHERE estado = 'Pendiente'", conn)
+                    st.success(f"🎉 Se han inyectado {horas_manuales} horas aprobadas a {nombre_p}.")
+        elif menu_admin == "📥 Bandeja General de Aprobaciones":
+            st.header("📥 Control General de Solicitudes Pendientes")
+            pendientes = pd.read_sql_query("SELECT id as 'ID', nombre as 'Empleado', area as 'Área', tipo_movimiento as 'Tipo', fecha as 'Fecha', hora_inicio as 'Desde', hora_fin as 'Hasta', total_horas as 'Horas', motivo as 'Motivo' FROM registro_horas WHERE estado = 'Pendiente'", conn)
             if not pendientes.empty:
                 st.dataframe(pendientes, use_container_width=True, hide_index=True)
-                id_aprobar = st.number_input("Digite el número ID de la solicitud que desea procesar:", min_value=1, step=1)
+                id_aprobar = st.number_input("Digite el número ID de la solicitud a procesar:", min_value=1, step=1)
+                motivo_rechazo_admin = st.text_input("Motivo del rechazo (obligatorio solo si va a rechazar):")
                 col_b1, col_b2 = st.columns(2)
                 with col_b1:
                     if st.button("🟢 Aprobar ID Seleccionado"):
                         cursor.execute("UPDATE registro_horas SET estado = 'Aprobado' WHERE id = ?", (id_aprobar,))
                         conn.commit()
-                        st.success(f"✔️ Solicitud #{id_aprobar} aprobada con éxito.")
+                        st.success(f"✔️ Solicitud #{id_aprobar} aprobada.")
                         st.rerun()
                 with col_b2:
                     if st.button("🔴 Rechazar ID Seleccionado"):
-                        cursor.execute("UPDATE registro_horas SET estado = 'Rechazado' WHERE id = ?", (id_aprobar,))
-                        conn.commit()
-                        st.error(f"❌ Solicitud #{id_aprobar} rechazada.")
-                        st.rerun()
+                        if motivo_rechazo_admin.strip() == "":
+                            st.error("❌ Escriba el motivo del rechazo antes de presionar el botón.")
+                        else:
+                            cursor.execute("UPDATE registro_horas SET estado = 'Rechazado', motivo_rechazo = ? WHERE id = ?", (motivo_rechazo_admin.strip(), id_aprobar))
+                            conn.commit()
+                            st.error(f"❌ Solicitud #{id_aprobar} rechazada.")
+                            st.rerun()
             else:
                 st.success("✅ Bandeja limpia. No hay solicitudes pendientes.")
 
         elif menu_admin == "📊 Bolsa Acumulativa General":
             st.header("📊 Bolsa Acumulativa de Horas Reales")
-            resumen = pd.read_sql_query("SELECT nombre as 'Empleado', SUM(total_horas) as 'Saldo Neto de Horas Disponibles' FROM registro_horas WHERE estado = 'Aprobado' GROUP BY nombre", conn)
+            resumen = pd.read_sql_query("SELECT nombre as 'Empleado', area as 'Área', SUM(total_horas) as 'Saldo Neto Disponible' FROM registro_horas WHERE estado = 'Aprobado' GROUP BY nombre, area", conn)
             st.dataframe(resumen, use_container_width=True, hide_index=True)
 
         elif menu_admin == "📚 Historial de Auditoría":
             st.header("📚 Historial de Transacciones de la Planilla")
-            historial = pd.read_sql_query("SELECT id, nombre, fecha, area, total_horas, estado, tipo_movimiento, motivo FROM registro_horas", conn)
+            historial = pd.read_sql_query("SELECT id, nombre, area, fecha, total_horas, estado, tipo_movimiento, motivo, motivo_rechazo FROM registro_horas", conn)
             st.dataframe(historial, use_container_width=True, hide_index=True)
             if not historial.empty:
                 output = io.BytesIO()
@@ -187,9 +238,48 @@ else:
                     historial.to_excel(writer, index=False, sheet_name='Bitacora_Horas_Ancon')
                 st.download_button(label="📥 Descargar Libro Completo en Excel (.xlsx)", data=output.getvalue(), file_name="Planilla_Horas_Ancon.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+    elif st.session_state["user_role"] == "MANAGER":
+        area_jefe = st.session_state["user_area"]
+        st.sidebar.markdown(f"### 👔 Jefe de Área:\n**{st.session_state['user_fullname']}**")
+        st.sidebar.info(f"Área asignada: **{area_jefe}**")
+        menu_mgr = st.sidebar.selectbox("Opciones de Supervisión", ["📥 Aprobar Solicitudes de mi Área", "📊 Saldos de mi Personal"])
+
+        if menu_mgr == "📥 Aprobar Solicitudes de mi Área":
+            st.header(f"📥 Solicitudes Pendientes — Área: {area_jefe}")
+            pendientes_area = pd.read_sql_query("SELECT id as 'ID', nombre as 'Empleado', tipo_movimiento as 'Tipo', fecha as 'Fecha', hora_inicio as 'Desde', hora_fin as 'Hasta', total_horas as 'Horas', motivo as 'Motivo' FROM registro_horas WHERE estado = 'Pendiente' AND area = ?", conn, params=(area_jefe,))
+            if not pendientes_area.empty:
+                st.dataframe(pendientes_area, use_container_width=True, hide_index=True)
+                id_proc = st.number_input("Digite el ID de la solicitud de su área:", min_value=1, step=1)
+                motivo_rec_mgr = st.text_input("Indique el motivo si va a rechazar la solicitud:")
+                c_m1, c_m2 = st.columns(2)
+                with c_m1:
+                    if st.button("🟢 Autorizar Solicitud"):
+                        cursor.execute("UPDATE registro_horas SET estado = 'Aprobado' WHERE id = ? AND area = ?", (id_proc, area_jefe))
+                        conn.commit()
+                        st.success("✔️ Solicitud autorizada.")
+                        st.rerun()
+                with c_m2:
+                    if st.button("🔴 Rechazar Solicitud"):
+                        if motivo_rec_mgr.strip() == "":
+                            st.error("❌ Debe escribir por qué rechaza el permiso o las horas.")
+                        else:
+                            cursor.execute("UPDATE registro_horas SET estado = 'Rechazado', motivo_rechazo = ? WHERE id = ? AND area = ?", (motivo_rec_mgr.strip(), id_proc, area_jefe))
+                            conn.commit()
+                            st.error("❌ Solicitud rechazada.")
+                            st.rerun()
+            else:
+                st.success("✅ No hay solicitudes pendientes en su área.")
+
+        elif menu_mgr == "📊 Saldos de mi Personal":
+            st.header(f"📊 Horas Disponibles — Área: {area_jefe}")
+            res_area = pd.read_sql_query("SELECT nombre as 'Empleado', SUM(total_horas) as 'Saldo Neto Disponible' FROM registro_horas WHERE estado = 'Aprobado' AND area = ? GROUP BY nombre", conn, params=(area_jefe,))
+            st.dataframe(res_area, use_container_width=True, hide_index=True)
+
     elif st.session_state["user_role"] == "PERSONAL":
         emp_nombre = st.session_state["user_fullname"]
+        emp_area = st.session_state["user_area"]
         st.sidebar.markdown(f"### 👨‍🔧 Panel de: \n**{emp_nombre}**")
+        st.sidebar.caption(f"Área: {emp_area}")
         menu_personal = st.sidebar.selectbox("Acciones Disponibles", [
             "📊 Mi Panel y Estatus",
             "✍️ Reportar Horas Extras (+)",
@@ -202,8 +292,18 @@ else:
             saldo_res = cursor.fetchone()
             saldo_neto = float(saldo_res[0]) if (saldo_res and saldo_res[0] is not None) else 0.0
             st.metric(label="⌛ Tu Saldo de Horas Disponibles a Favor:", value=f"{saldo_neto} hrs")
-            df_mis_solicitudes = pd.read_sql_query("SELECT fecha as 'Fecha', hora_inicio as 'Inicio', hora_fin as 'Fin', total_horas as 'Horas', estado as 'Estatus del Jefe', motivo as 'Detalle/Motivo' FROM registro_horas WHERE nombre = ? ORDER BY id DESC", conn, params=(emp_nombre,))
+            
+            df_mis_solicitudes = pd.read_sql_query("SELECT id as 'ID', fecha as 'Fecha', hora_inicio as 'Inicio', hora_fin as 'Fin', total_horas as 'Horas', estado as 'Estatus', motivo as 'Mi Motivo', motivo_rechazo as 'Observación del Jefe' FROM registro_horas WHERE nombre = ? ORDER BY id DESC", conn, params=(emp_nombre,))
             st.dataframe(df_mis_solicitudes, use_container_width=True, hide_index=True)
+            
+            cursor.execute("SELECT COUNT(*) FROM registro_horas WHERE nombre = ? AND estado = 'Rechazado'", (emp_nombre,))
+            if cursor.fetchone()[0] > 0:
+                st.markdown("---")
+                if st.button("🗑️ Limpiar / Borrar mis Solicitudes Rechazadas de la Pantalla"):
+                    cursor.execute("DELETE FROM registro_horas WHERE nombre = ? AND estado = 'Rechazado'", (emp_nombre,))
+                    conn.commit()
+                    st.success("✔️ Solicitudes rechazadas eliminadas de tu vista.")
+                    st.rerun()
 
         elif menu_personal == "✍️ Reportar Horas Extras (+)":
             st.header("✍️ Reportar Jornada Extraordinaria")
@@ -224,7 +324,7 @@ else:
                     total_horas_calculadas = round(diferencia.seconds / 3600, 2)
                     foto_bytes = foto_adjunta.read() if foto_adjunta is not None else None
                     fecha_str = fecha_input.strftime("%d/%m/%Y")
-                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Operaciones', 'Operario', ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')", (emp_nombre, fecha_str, h_ini_str, h_fin_str, motivo, total_horas_calculadas, foto_bytes))
+                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento, motivo_rechazo) VALUES (?, ?, 'N/A', ?, 'Operario', ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO', '')", (emp_nombre, fecha_str, emp_area, h_ini_str, h_fin_str, motivo, total_horas_calculadas, foto_bytes))
                     conn.commit()
                     st.success(f"✔️ Solicitud registrada con éxito ({total_horas_calculadas} hrs calculadas).")
 
@@ -236,7 +336,7 @@ else:
                 motivo_libre = st.text_area("Justificación o detalle del permiso:")
                 if st.form_submit_button("Enviar Solicitud de Compensatorio"):
                     fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
-                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Uso de Tiempo', 'Operario', 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')", (emp_nombre, fecha_libre_str, motivo_libre, -float(horas_solicitadas)))
+                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento, motivo_rechazo) VALUES (?, ?, 'N/A', ?, 'Operario', 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION', '')", (emp_nombre, fecha_libre_str, emp_area, motivo_libre, -float(horas_solicitadas)))
                     conn.commit()
                     st.success("🔻 Solicitud de día compensatorio enviada con éxito.")
 
