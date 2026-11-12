@@ -79,6 +79,7 @@ elif st.session_state["logged_in"] and st.session_state["requiere_cambio"] == 1:
                 st.session_state["requiere_cambio"] = 0
                 st.success("🎉 ¡Contraseña guardada con éxito!")
                 st.rerun()
+
 else:
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["logged_in"] = False
@@ -149,7 +150,6 @@ else:
                     cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Recursos Humanos', 'Operario', 'N/A', 'N/A', ?, ?, 'Aprobado', None, 'INGRESO')", (colab_sel, fecha_hoy, motivo_manual, float(horas_manuales)))
                     conn.commit()
                     st.success(f"🎉 Se han inyectado {horas_manuales} horas aprobadas a {colab_sel}.")
-
         elif menu_admin == "📥 Bandeja de Aprobaciones Rápidas":
             st.header("📥 Control de Solicitudes Pendientes")
             pendientes = pd.read_sql_query("SELECT id as 'ID', nombre as 'Empleado', fecha as 'Fecha', hora_inicio as 'Desde', hora_fin as 'Hasta', total_horas as 'Horas', motivo as 'Motivo/Detalle' FROM registro_horas WHERE estado = 'Pendiente'", conn)
@@ -187,8 +187,8 @@ else:
                     historial.to_excel(writer, index=False, sheet_name='Bitacora_Horas_Ancon')
                 st.download_button(label="📥 Descargar Libro Completo en Excel (.xlsx)", data=output.getvalue(), file_name="Planilla_Horas_Ancon.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-            elif st.session_state["user_role"] == "PERSONAL":
-           emp_nombre = st.session_state["user_fullname"]
+    elif st.session_state["user_role"] == "PERSONAL":
+        emp_nombre = st.session_state["user_fullname"]
         st.sidebar.markdown(f"### 👨‍🔧 Panel de: \n**{emp_nombre}**")
         menu_personal = st.sidebar.selectbox("Acciones Disponibles", [
             "📊 Mi Panel y Estatus",
@@ -209,18 +209,14 @@ else:
             st.header("✍️ Reportar Jornada Extraordinaria")
             with st.form("form_extras_p", clear_on_submit=True):
                 fecha_input = st.date_input("Fecha de la Jornada:")
-                
                 horas_lista = ["06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM", "09:00 PM", "10:00 PM"]
-
                 col_h1, col_h2 = st.columns(2)
                 with col_h1:
                     h_ini_str = st.selectbox("Hora de Inicio:", horas_lista, index=2)
                 with col_h2:
                     h_fin_str = st.selectbox("Hora de Finalización:", horas_lista, index=11)
-                
                 motivo = st.text_area("Motivo de la jornada:")
                 foto_adjunta = st.file_uploader("Adjuntar foto de comprobante:", type=["png", "jpg", "jpeg"])
-                
                 if st.form_submit_button("Subir Solicitud"):
                     t1 = datetime.strptime(h_ini_str, "%I:%M %p")
                     t2 = datetime.strptime(h_fin_str, "%I:%M %p")
@@ -228,7 +224,6 @@ else:
                     total_horas_calculadas = round(diferencia.seconds / 3600, 2)
                     foto_bytes = foto_adjunta.read() if foto_adjunta is not None else None
                     fecha_str = fecha_input.strftime("%d/%m/%Y")
-                    
                     cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Operaciones', 'Operario', ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')", (emp_nombre, fecha_str, h_ini_str, h_fin_str, motivo, total_horas_calculadas, foto_bytes))
                     conn.commit()
                     st.success(f"✔️ Solicitud registrada con éxito ({total_horas_calculadas} hrs calculadas).")
@@ -239,7 +234,6 @@ else:
                 fecha_libre = st.date_input("Fecha solicitada para el permiso o día libre:")
                 horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej. 8.0 para un día completo):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
                 motivo_libre = st.text_area("Justificación o detalle del permiso:")
-                
                 if st.form_submit_button("Enviar Solicitud de Compensatorio"):
                     fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
                     cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Uso de Tiempo', 'Operario', 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')", (emp_nombre, fecha_libre_str, motivo_libre, -float(horas_solicitadas)))
