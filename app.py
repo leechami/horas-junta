@@ -187,10 +187,14 @@ else:
                     historial.to_excel(writer, index=False, sheet_name='Bitacora_Horas_Ancon')
                 st.download_button(label="📥 Descargar Libro Completo en Excel (.xlsx)", data=output.getvalue(), file_name="Planilla_Horas_Ancon.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-    elif st.session_state["user_role"] == "PERSONAL":
+        elif st.session_state["user_role"] == "PERSONAL":
         emp_nombre = st.session_state["user_fullname"]
         st.sidebar.markdown(f"### 👨‍🔧 Panel de: \n**{emp_nombre}**")
-        menu_personal = st.sidebar.selectbox("Acciones Disponibles", ["📊 Mi Panel y Estatus", "✍️ Reportar Horas Extras (+)", "🔻 Solicitar Día Compensatorio (-)"])
+        menu_personal = st.sidebar.selectbox("Acciones Disponibles", [
+            "📊 Mi Panel y Estatus",
+            "✍️ Reportar Horas Extras (+)",
+            "🔻 Solicitar Día Compensatorio (-)"
+        ])
         
         if menu_personal == "📊 Mi Panel y Estatus":
             st.header(f"👋 ¡Bienvenido, {emp_nombre}!")
@@ -198,86 +202,47 @@ else:
             saldo_res = cursor.fetchone()
             saldo_neto = float(saldo_res[0]) if (saldo_res and saldo_res[0] is not None) else 0.0
             st.metric(label="⌛ Tu Saldo de Horas Disponibles a Favor:", value=f"{saldo_neto} hrs")
-            df_mis_solicitudes = pd.read_sql_query("SELECT fecha as 'Fecha', dia as 'Día', hora_inicio as 'Inicio', hora_fin as 'Fin', total_horas as 'Horas', estado as 'Estatus del Jefe', motivo as 'Detalle/Motivo' FROM registro_horas WHERE nombre = ? ORDER BY id DESC", conn, params=(emp_nombre,))
+            df_mis_solicitudes = pd.read_sql_query("SELECT fecha as 'Fecha', hora_inicio as 'Inicio', hora_fin as 'Fin', total_horas as 'Horas', estado as 'Estatus del Jefe', motivo as 'Detalle/Motivo' FROM registro_horas WHERE nombre = ? ORDER BY id DESC", conn, params=(emp_nombre,))
             st.dataframe(df_mis_solicitudes, use_container_width=True, hide_index=True)
 
         elif menu_personal == "✍️ Reportar Horas Extras (+)":
             st.header("✍️ Reportar Jornada Extraordinaria")
             with st.form("form_extras_p", clear_on_submit=True):
                 fecha_input = st.date_input("Fecha de la Jornada:")
-                dia_semana = st.selectbox("Día de la Semana:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
                 
-                # SELECCIÓN AM/PM DISPONIBLE NATIVA
-                hora_inicio = st.time_input("Hora de Inicio:", value=datetime.now().time(), step=60)
-                hora_fin = st.time_input("Hora de Finalización:", value=datetime.now().time(), step=60)
+                horas_lista = [f"{h:02d}:{m:02d} {ampm}" for ampm in ["AM", "PM"] for h in ([12] + list(range(1, 12))) for m in]
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    h_ini_str = st.selectbox("Hora de Inicio:", horas_lista, index=32)
+                with col_h2:
+                    h_fin_str = st.selectbox("Hora de Finalización:", horas_lista, index=68)
                 
-                motivo = st.text_area("Motivo de la jornada:")
-                foto_adjunta = st.file_uploader("Adjuntar foto de comprobante:", type=["png", "jpg", "jpeg"])
-                if st.form_submit_button("Subir Solicitud"):
-                    fmt = "%H:%M:%S"
-                    t1 = datetime.strptime(str(hora_inicio), fmt)
-                    t2 = datetime.strptime(str(hora_fin), fmt)
-                    diferencia = (t2 - t1) if t2 >= t1 else (t2 - t1) + pd.Timedelta(days=1)
-                    total_horas_calculadas = round(diferencia.seconds / 3600, 2)
-    elif st.session_state["user_role"] == "PERSONAL":
-        emp_nombre = st.session_state["user_fullname"]
-        st.sidebar.markdown(f"### 👨‍🔧 Panel de: \n**{emp_nombre}**")
-        menu_personal = st.sidebar.selectbox("Acciones Disponibles", ["📊 Mi Panel y Estatus", "✍️ Reportar Horas Extras (+)", "🔻 Solicitar Día Compensatorio (-)"])
-        
-        if menu_personal == "📊 Mi Panel y Estatus":
-            st.header(f"👋 ¡Bienvenido, {emp_nombre}!")
-            cursor.execute("SELECT SUM(total_horas) FROM registro_horas WHERE nombre = ? AND estado = 'Aprobado'", (emp_nombre,))
-            saldo_res = cursor.fetchone()
-            saldo_neto = float(saldo_res[0]) if (saldo_res and saldo_res[0] is not None) else 0.0
-            st.metric(label="⌛ Tu Saldo de Horas Disponibles a Favor:", value=f"{saldo_neto} hrs")
-            df_mis_solicitudes = pd.read_sql_query("SELECT fecha as 'Fecha', dia as 'Día', hora_inicio as 'Inicio', hora_fin as 'Fin', total_horas as 'Horas', estado as 'Estatus del Jefe', motivo as 'Detalle/Motivo' FROM registro_horas WHERE nombre = ? ORDER BY id DESC", conn, params=(emp_nombre,))
-            st.dataframe(df_mis_solicitudes, use_container_width=True, hide_index=True)
-
-        elif menu_personal == "✍️ Reportar Horas Extras (+)":
-            st.header("✍️ Reportar Jornada Extraordinaria")
-            with st.form("form_extras_p", clear_on_submit=True):
-                fecha_input = st.date_input("Fecha de la Jornada:")
-                dia_semana = st.selectbox("Día de la Semana:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-                hora_inicio = st.time_input("Hora de Inicio:", value=datetime.now().time(), step=60)
-                hora_fin = st.time_input("Hora de Finalización:", value=datetime.now().time(), step=60)
                 motivo = st.text_area("Motivo de la jornada:")
                 foto_adjunta = st.file_uploader("Adjuntar foto de comprobante:", type=["png", "jpg", "jpeg"])
                 
                 if st.form_submit_button("Subir Solicitud"):
-                    fmt = "%H:%M:%S"
-                    t1 = datetime.strptime(str(hora_inicio), fmt)
-                    t2 = datetime.strptime(str(hora_fin), fmt)
+                    t1 = datetime.strptime(h_ini_str, "%I:%M %p")
+                    t2 = datetime.strptime(h_fin_str, "%I:%M %p")
                     diferencia = (t2 - t1) if t2 >= t1 else (t2 - t1) + pd.Timedelta(days=1)
                     total_horas_calculadas = round(diferencia.seconds / 3600, 2)
                     foto_bytes = foto_adjunta.read() if foto_adjunta is not None else None
-                    
-                    # GUARDAR EN FORMATO DE RELOJ AM/PM TRADICIONAL
-                    h_ini_ampm = hora_inicio.strftime("%I:%M %p")
-                    h_fin_ampm = hora_fin.strftime("%I:%M %p")
                     fecha_str = fecha_input.strftime("%d/%m/%Y")
                     
-                    cursor.execute("""
-                        INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) 
-                        VALUES (?, ?, ?, 'Operaciones', 'Operario', ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')
-                    """, (emp_nombre, fecha_str, dia_semana, h_ini_ampm, h_fin_ampm, motivo, total_horas_calculadas, foto_bytes))
+                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Operaciones', 'Operario', ?, ?, ?, ?, 'Pendiente', ?, 'INGRESO')", (emp_nombre, fecha_str, h_ini_str, h_fin_str, motivo, total_horas_calculadas, foto_bytes))
                     conn.commit()
                     st.success(f"✔️ Solicitud registrada con éxito ({total_horas_calculadas} hrs calculadas).")
 
         elif menu_personal == "🔻 Solicitar Día Compensatorio (-)":
             st.header("🔻 Solicitar Uso de Tiempo Libre / Día Compensatorio")
             with st.form("form_libres_p", clear_on_submit=True):
-                fecha_libre = st.date_input("Fecha solicitada:")
-                dia_libre_semana = st.selectbox("Día de la semana solicitado:", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-                horas_solicitadas = st.number_input("Cantidad de horas a descontar:", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
-                motivo_libre = st.text_area("Justificación:")
+                fecha_libre = st.date_input("Fecha solicitada para el permiso o día libre:")
+                horas_solicitadas = st.number_input("Cantidad de horas a descontar (ej. 8.0 para un día completo):", min_value=0.5, max_value=40.0, value=8.0, step=0.5)
+                motivo_libre = st.text_area("Justificación o detalle del permiso:")
                 
-                if st.form_submit_button("Enviar Solicitud"):
+                if st.form_submit_button("Enviar Solicitud de Compensatorio"):
                     fecha_libre_str = fecha_libre.strftime("%d/%m/%Y")
-                    cursor.execute("""
-                        INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) 
-                        VALUES (?, ?, ?, 'Uso de Tiempo', 'Operario', 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')
-                    """, (emp_nombre, fecha_libre_str, dia_libre_semana, motivo_libre, -float(horas_solicitadas)))
+                    cursor.execute("INSERT INTO registro_horas (nombre, fecha, dia, area, cargo, hora_inicio, hora_fin, motivo, total_horas, estado, evidencia, tipo_movimiento) VALUES (?, ?, 'N/A', 'Uso de Tiempo', 'Operario', 'N/A', 'N/A', ?, ?, 'Pendiente', None, 'REDUCCION')", (emp_nombre, fecha_libre_str, motivo_libre, -float(horas_solicitadas)))
                     conn.commit()
-                    st.success("🔻 Solicitud de tiempo libre enviada con éxito.")
+                    st.success("🔻 Solicitud de día compensatorio enviada con éxito.")
 
 conn.close()
